@@ -1,0 +1,3 @@
+["prismatic-tree-sitter-core/vendor"]
+src = "tree-sitter/tree-sitter"
+tag = "v0.25.10"
