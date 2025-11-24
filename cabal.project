@@ -1,1 +1,2 @@
-packages: prismatic-tree-sitter
+packages:
+  prismatic-tree-sitter-core
