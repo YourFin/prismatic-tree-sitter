@@ -51,7 +51,12 @@
               # enable = true;
 
               mkShellArgs = {
-                nativeBuildInputs = with pkgs; [ just ];
+                nativeBuildInputs = with pkgs; [
+                  just
+                  nushell
+                  fzf
+                  curl
+                ];
               };
               # Programs you want to make available in the shell.
               # Default programs can be disabled by setting to 'null'
