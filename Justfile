@@ -26,14 +26,14 @@ subtree-add path repo:
     git commit --amend --no-edit
     
 [group('subtree')]
-subtree-update path="null":
+subtree-update path="optional":
     #!/usr/bin/env -S nu -n
     if (which gh | length) == 0 {
       print "Error: You need the github cli installed to run this update"
       exit 1
     }
     let mPath = '{{path}}'
-    let path = if ($mPath == "null") {
+    let path = if ($mPath == "optional") {
       open .subtree.toml | columns | str join "\n" | fzf
     } else {
       $mPath
