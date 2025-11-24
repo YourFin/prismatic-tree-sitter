@@ -50,13 +50,17 @@
               # Enabled by default
               # enable = true;
 
+              mkShellArgs = {
+                nativeBuildInputs = with pkgs; [ just ];
+              };
               # Programs you want to make available in the shell.
               # Default programs can be disabled by setting to 'null'
               # tools = hp: { fourmolu = hp.fourmolu; ghcid = null; };
-              tools = hp: {
-                fourmolu = hp.fourmolu;
-                hpack = hp.hpack;
-              };
+              tools =
+                hp: with pkgs; {
+                  fourmolu = hp.fourmolu;
+                  hpack = hp.hpack;
+                };
 
               # Check that haskell-language-server works
               # hlsCheck.enable = true; # Requires sandbox to be disabled
