@@ -1,0 +1,49 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.38.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           prismatic-tree-sitter-core
+version:        0.0.0
+author:         YourFin
+maintainer:     src@patrickn_REMOVE_FIRST_UNDERSCORE_AND_LATER.co
+build-type:     Simple
+
+flag dev
+  description: Compile in dev mode
+  manual: True
+  default: False
+
+library
+  exposed-modules:
+      Data.Prismatic.TreeSitter
+  other-modules:
+      Paths_prismatic_tree_sitter_core
+  hs-source-dirs:
+      src
+  default-extensions:
+      TemplateHaskell
+      TypeFamilies
+      OverloadedLabels
+      OverloadedRecordDot
+      DuplicateRecordFields
+      RecordWildCards
+      QuasiQuotes
+      BlockArguments
+  ghc-options: -Wall -Wredundant-constraints
+  cc-options: -std=c99 -D_GNU_SOURCE
+  include-dirs:
+      vendor/lib/include
+      vendor/lib/src
+  install-includes:
+      tree_sitter/api.h
+  c-sources:
+      vendor/lib/src/lib.c
+  build-depends:
+      base >=4.20 && <5
+  default-language: GHC2024
+  if flag(dev)
+    ghc-options: -O0
+  else
+    ghc-options: -O2

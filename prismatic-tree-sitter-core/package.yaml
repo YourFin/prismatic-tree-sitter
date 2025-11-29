@@ -1,0 +1,18 @@
+name: prismatic-tree-sitter-core
+_common: !include "../package-common.yaml"
+
+<<: *commonTopLevel
+
+library:
+  source-dirs: src
+  include-dirs:
+    - vendor/lib/include
+    - vendor/lib/src
+  install-includes:
+    - tree_sitter/api.h
+  c-sources:
+    - vendor/lib/src/lib.c
+  cc-options:
+    - -std=c99
+    # https://github.com/amartani/covers/commit/00d61bd5aa8eaa7528652b3ea609d0af9fcf03ed
+    - -D_GNU_SOURCE

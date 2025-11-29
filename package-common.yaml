@@ -1,0 +1,38 @@
+&commonTopLevel
+  author:          YourFin
+  maintainer:      src@patrickn_REMOVE_FIRST_UNDERSCORE_AND_LATER.co
+  version: "0.0.0"
+
+  dependencies:
+   - base >= 4.20 && < 5
+   
+  
+  language: GHC2024
+  default-extensions:
+  - TemplateHaskell
+  - TypeFamilies
+  - OverloadedLabels
+  - OverloadedRecordDot
+  - DuplicateRecordFields
+  - RecordWildCards
+  - QuasiQuotes
+  - BlockArguments
+  
+  ghc-options:
+  - -Wall
+  - -Wredundant-constraints
+  
+  when:
+   - condition: flag(dev)
+     then:
+       ghc-options:
+        - -O0
+     else:
+       ghc-options:
+        - -O2
+        
+  flags:
+    dev:
+      description: "Compile in dev mode"
+      default: false
+      manual: true
