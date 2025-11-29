@@ -9,6 +9,11 @@
 /* Vendored with love from:                                          */
 /* https://github.com/rethab/bindings-dsl/blob/master/bindings.dsl.h */
 /* Adjusted for use with the new capi foreign imports                */
+/* Also:                                                             */
+/*  - Defining CURRENT_LIBRARY_HSC_CAPI in a different header allows */
+/*    for use of capi_ and capi_unsafe_, with the header name        */
+/*    pre-bound to CURRENT_LIBRARY_HSC_CAPI                          */
+/*  - Adds Generic to all generated deriving clauses                 */
 /*********************************************************************/
 
 #ifndef BINDINGS_DSL_H_
@@ -34,6 +39,7 @@
          "import Foreign.Marshal.Alloc (alloca)\n"                             \
          "import Foreign.Marshal.Array (peekArray,pokeArray)\n"                \
          "import Data.Int\n"                                                   \
+         "import GHC.Generics\n"                                               \
          "import Data.Word\n");
 
 #define bc_word(name)                                                          \
@@ -402,13 +408,16 @@ static struct {
     printf("\n");                                                              \
   }                                                                            \
   if (!standalone_deriving)                                                    \
-    printf("} deriving (Eq,Show)\n");                                          \
+    printf("} deriving (Eq,Show,Generic)\n");                                  \
   else {                                                                       \
     printf("}\n");                                                             \
     printf("deriving instance Eq ");                                           \
     bc_conid(typename);                                                        \
     printf("\n");                                                              \
     printf("deriving instance Show ");                                         \
+    bc_conid(typename);                                                        \
+    printf("\n");                                                              \
+    printf("deriving instance Generic ");                                      \
     bc_conid(typename);                                                        \
     printf("\n");                                                              \
   }                                                                            \
