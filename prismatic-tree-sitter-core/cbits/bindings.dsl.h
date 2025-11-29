@@ -195,14 +195,22 @@
   bc_varid(#name);                                                             \
   printf(" :: FunPtr a\n");
 
-#define hsc_capi(header, name, type)                                           \
-  printf("foreign import capi \"%s %s\" ", header, #name);                     \
+#define hsc_capi_start_header(header)                                          \
+  {                                                                            \
+    char *head = header;
+
+#define hsc_capi_stop_header(dummy)                                            \
+  }                                                                            \
+  ;
+
+#define hsc_capi(name, type)                                                   \
+  printf("foreign import capi \"%s %s\" ", head, #name);                       \
   bc_varid(#name);                                                             \
   printf("\n");                                                                \
   printf("  :: ");                                                             \
   bc_typemarkup(#type);                                                        \
   printf("\n");                                                                \
-  printf("foreign import capi \"%s &%s\" ", header, #name);                    \
+  printf("foreign import capi \"%s &%s\" ", head, #name);                      \
   bc_ptrid(#name);                                                             \
   printf("\n");                                                                \
   printf("  :: FunPtr (");                                                     \
@@ -210,23 +218,19 @@
   printf(")\n");
 
 /* experimental support for unsafe calls */
-#define hsc_capi_unsafe(header, name, type)                                    \
-  printf("foreign import capi unsafe \"%s %s\" unsafe'", header, #name);       \
+#define hsc_capi_unsafe(name, type)                                            \
+  printf("foreign import capi unsafe \"%s %s\" unsafe'", head, #name);         \
   bc_varid(#name);                                                             \
   printf("\n");                                                                \
   printf("  :: ");                                                             \
   bc_typemarkup(#type);                                                        \
   printf("\n");                                                                \
-  printf("foreign import capi unsafe \"%s &%s\" unsafe'", header #name);       \
+  printf("foreign import capi unsafe \"%s &%s\" unsafe'", head, #name);        \
   bc_ptrid(#name);                                                             \
   printf("\n");                                                                \
   printf("  :: FunPtr (");                                                     \
   bc_typemarkup(#type);                                                        \
   printf(")\n");
-
-#define hsc_capi_(name, type) hsc_capi(CURRENT_LIBRARY_HSC_CAPI, name, type)
-#define hsc_capi_unsafe_(name, type)                                           \
-  hsc_capi_unsafe(CURRENT_LIBRARY_HSC_CAPI, name, type)
 
 // /* experimental support for interruptible calls */
 // #define hsc_capi_interruptible(name, type) \

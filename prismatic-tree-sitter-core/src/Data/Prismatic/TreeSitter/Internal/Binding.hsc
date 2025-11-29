@@ -2,7 +2,6 @@
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 -- Imports from #strict-import ^
 #include <tree_sitter/api.h>
-#include <current_library_tree_sitter_api.h>
 #include <bindings.dsl.h>
 
 module Data.Prismatic.TreeSitter.Internal.Binding where
@@ -163,12 +162,13 @@ type DecodeFunction = FunPtr (ConstPtr Word8 -> Word32 -> Ptr Word32 -> IO Word3
 -- * Section - Parser
 
 -- | Create a new parser.
-#capi_ ts_parser_new , IO ( Ptr <TSParser> )
+#capi_start_header "tree_sitter/api.h"
+#capi ts_parser_new , IO ( Ptr <TSParser> )
 -- | Delete the parser, freeing all of the memory that it used.
-#capi_ ts_parser_delete , Ptr <TSParser> -> IO ()
+#capi ts_parser_delete , Ptr <TSParser> -> IO ()
 
 -- | Get the parser's current language.
-#capi_ ts_parser_language , ConstPtr <TSParser> -> IO (ConstPtr <TSLanguage>)
+#capi ts_parser_language , ConstPtr <TSParser> -> IO (ConstPtr <TSLanguage>)
 
 -- | Set the language that the parser should use for parsing.
 -- 
@@ -178,7 +178,7 @@ type DecodeFunction = FunPtr (ConstPtr Word8 -> Word32 -> Ptr Word32 -> IO Word3
 --  Tree-sitter CLI. Check the language's ABI version using [`ts_language_abi_version`]
 --  and compare it to this library's [`TREE_SITTER_LANGUAGE_VERSION`] and
 --  [`TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION`] constants.
-#capi_ ts_parser_set_language , Ptr <TSParser> -> \
+#capi ts_parser_set_language , Ptr <TSParser> -> \
   ConstPtr <TSLanguage> -> \
   IO CBool
 
@@ -202,7 +202,7 @@ type DecodeFunction = FunPtr (ConstPtr Word8 -> Word32 -> Ptr Word32 -> IO Word3
 -- If this requirement is not satisfied, the operation will fail, the ranges
 -- will not be assigned, and this function will return `false`. On success,
 -- this function returns `true`
-#capi_ ts_parser_set_included_ranges , Ptr <TSParser> -> \
+#capi ts_parser_set_included_ranges , Ptr <TSParser> -> \
   ConstPtr <TSRange> -> \
   Word32 -> \
   IO CBool
@@ -212,7 +212,8 @@ type DecodeFunction = FunPtr (ConstPtr Word8 -> Word32 -> Ptr Word32 -> IO Word3
 -- The returned pointer is owned by the parser. The caller should not free it
 -- or write to it. The length of the array will be written to the given
 -- `count` pointer.
-#capi_ ts_parser_included_ranges , ConstPtr <TSParser> -> \
+#capi ts_parser_included_ranges , ConstPtr <TSParser> -> \
   Ptr Word32 -> \
   ConstPtr <TSRange>
 
+#capi_stop_header "tree_sitter/api.h"
