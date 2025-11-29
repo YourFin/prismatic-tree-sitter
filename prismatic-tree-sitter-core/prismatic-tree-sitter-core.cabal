@@ -18,6 +18,7 @@ flag dev
 library
   exposed-modules:
       Data.Prismatic.TreeSitter
+      Data.Prismatic.TreeSitter.Internal.Binding
   other-modules:
       Paths_prismatic_tree_sitter_core
   hs-source-dirs:
@@ -36,6 +37,7 @@ library
   include-dirs:
       vendor/lib/include
       vendor/lib/src
+      cbits
   install-includes:
       tree_sitter/api.h
   c-sources:

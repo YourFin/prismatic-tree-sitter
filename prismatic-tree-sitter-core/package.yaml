@@ -8,6 +8,7 @@ library:
   include-dirs:
     - vendor/lib/include
     - vendor/lib/src
+    - cbits
   install-includes:
     - tree_sitter/api.h
   c-sources:
