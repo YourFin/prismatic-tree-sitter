@@ -33,7 +33,7 @@ library
       QuasiQuotes
       BlockArguments
   ghc-options: -Wall -Wredundant-constraints
-  cc-options: -std=c99 -D_GNU_SOURCE
+  cc-options: -std=c99 -D_GNU_SOURCE -Wno-gnu-folding-constant
   include-dirs:
       vendor/lib/include
       vendor/lib/src
@@ -42,6 +42,7 @@ library
       tree_sitter/api.h
   c-sources:
       vendor/lib/src/lib.c
+      cbits/tree_sitter_ffi_bridge.c
   build-depends:
       base >=4.20 && <5
   default-language: GHC2024

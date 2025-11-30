@@ -13,7 +13,9 @@ library:
     - tree_sitter/api.h
   c-sources:
     - vendor/lib/src/lib.c
+    - cbits/tree_sitter_ffi_bridge.c
   cc-options:
     - -std=c99
     # https://github.com/amartani/covers/commit/00d61bd5aa8eaa7528652b3ea609d0af9fcf03ed
     - -D_GNU_SOURCE
+    - -Wno-gnu-folding-constant
