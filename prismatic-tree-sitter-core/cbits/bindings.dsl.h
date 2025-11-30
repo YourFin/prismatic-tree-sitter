@@ -392,7 +392,7 @@ static struct {
   bc_fielddata.array_size[index] = sizeof bc_refdata.v.name
 
 #define hsc_stoptype(dummy)                                                    \
-  printf("data ");                                                             \
+  printf("data {-# CTYPE \"%s\" \"%s\" #-} ", head, typename);                 \
   bc_conid(typename);                                                          \
   printf(" = ");                                                               \
   bc_conid(typename);                                                          \
