@@ -199,6 +199,15 @@
   {                                                                            \
     char *head = header;
 
+// While the argument to this macro is optional and does nothing, providing one
+// is reccomended on large blocks to make it clear which capi_start_header it
+// matches.
+//
+// i.e.:
+//
+// #capi_start_header "my_lib.h"
+// ...
+// #capi_stop_header "my_lib.h"
 #define hsc_capi_stop_header(dummy)                                            \
   }                                                                            \
   ;
