@@ -309,35 +309,28 @@
   bc_typemarkup(#type);                                                        \
   printf("\n");
 
-// #ifdef BINDINGS_STDCALLCONV
-// #define hsc_callback(name, type) hsc_callbackconv(name, stdcall, type)
-// #define hsc_callback_t(name, type) hsc_callbackconv(name, stdcall, type)
-// #else
-// #define hsc_callback(name, type) hsc_callbackconv(name, capi, type)
-// #define hsc_callback_t(name, type) hsc_callbackconv(name, capi, type)
-// #endif
-//
-// #define hsc_callbackconv(name, conv, type) \
-//   printf("type "); \
-//   bc_conid(#name); \
-//   printf(" = FunPtr ("); \
-//   bc_typemarkup(#type); \
-//   printf(")\n"); \
-//   printf("foreign import " #conv " \"wrapper\" "); \
-//   bc_wrapper(#name); \
-//   printf("\n"); \
-//   printf("  :: ("); \
-//   bc_typemarkup(#type); \
-//   printf(") -> IO "); \
-//   bc_conid(#name); \
-//   printf("\n"); \
-//   printf("foreign import " #conv " \"dynamic\" "); \
-//   bc_dynamic(#name); \
-//   printf("\n"); \
-//   printf("  :: "); \
-//   bc_conid(#name); \
-//   printf(" -> ("); \
-//   bc_typemarkup(#type); \ printf(")\n");
+#define hsc_callback_t(name, type)                                             \
+  printf("type ");                                                             \
+  bc_conid(#name);                                                             \
+  printf(" = FunPtr (");                                                       \
+  bc_typemarkup(#type);                                                        \
+  printf(")\n");                                                               \
+  printf("foreign import ccall \"wrapper\" ");                                 \
+  bc_wrapper(#name);                                                           \
+  printf("\n");                                                                \
+  printf("  :: (");                                                            \
+  bc_typemarkup(#type);                                                        \
+  printf(") -> IO (FunPtr (");                                                 \
+  bc_typemarkup(#type);                                                        \
+  printf("))\n");                                                              \
+  printf("foreign import capi \"dynamic\" ");                                  \
+  bc_dynamic(#name);                                                           \
+  printf("\n");                                                                \
+  printf("  :: ");                                                             \
+  bc_conid(#name);                                                             \
+  printf(" -> (");                                                             \
+  bc_typemarkup(#type);                                                        \
+  printf(")\n");
 
 static struct {
   int n, is_union[500], is_fam[500];
