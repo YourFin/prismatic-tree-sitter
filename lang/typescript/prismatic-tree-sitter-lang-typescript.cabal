@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           prismatic-tree-sitter-core
+name:           prismatic-tree-sitter-lang-typescript
 version:        0.0.0
 author:         YourFin
 maintainer:     src@patrickn_REMOVE_FIRST_UNDERSCORE_AND_LATER.co
@@ -17,13 +17,10 @@ flag dev
 
 library
   exposed-modules:
-      Data.Prismatic.TreeSitter
-      Data.Prismatic.TreeSitter.Node
-      TreeSitter.Prismatic.Internal.Binding
-      TreeSitter.Prismatic.Internal.Language
-      TreeSitter.Prismatic.Internal.Language.TH
+      TreeSitter.Prismatic.Language.Typescript
+      TreeSitter.Prismatic.Language.Typescript.Core
   other-modules:
-      Paths_prismatic_tree_sitter_core
+      Paths_prismatic_tree_sitter_lang_typescript
   hs-source-dirs:
       src
   default-extensions:
@@ -38,19 +35,14 @@ library
   ghc-options: -Wall -Wredundant-constraints
   cc-options: -std=c99 -D_GNU_SOURCE -Wno-gnu-folding-constant
   include-dirs:
-      vendor/lib/include
-      vendor/lib/src
-      cbits
-  install-includes:
-      tree_sitter/api.h
+      vendor/typescript/src
+      vendor/bindings/c
   c-sources:
-      vendor/lib/src/lib.c
-      cbits/tree_sitter_ffi_bridge.c
+      vendor/typescript/src/parser.c
+      vendor/typescript/src/scanner.c
   build-depends:
       base >=4.20 && <5
-    , bytestring
-    , template-haskell >=2.20 && <3
-    , text
+    , prismatic-tree-sitter-core
   default-language: GHC2024
   if flag(dev)
     ghc-options: -O0

@@ -23,6 +23,8 @@ static inline void adapt_ts_input(TSInput_ *input, WrappedPayload *out_p,
   out->decode = input->decode;
 }
 
+void ts_language_delete_nonconst(TSLanguage *self) { ts_language_delete(self); }
+
 TSTree *ts_parser_parse_(TSParser *self, const TSTree *old_tree,
                          TSInput_ *input) {
   WrappedPayload w;

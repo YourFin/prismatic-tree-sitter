@@ -1,2 +1,3 @@
 packages:
   prismatic-tree-sitter-core
+  lang/*/*.cabal

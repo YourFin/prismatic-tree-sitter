@@ -11,6 +11,8 @@ typedef struct TSInput_ {
   DecodeFunction decode;
 } TSInput_;
 
+void ts_language_delete_nonconst(TSLanguage *self);
+
 TSTree *ts_parser_parse_(TSParser *self, const TSTree *old_tree,
                          TSInput_ *input);
 

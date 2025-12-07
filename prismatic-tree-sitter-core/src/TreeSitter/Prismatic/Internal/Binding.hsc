@@ -5,7 +5,7 @@
 #include <tree_sitter_ffi_bridge.h>
 #include <bindings.dsl.h>
 
-module Data.Prismatic.TreeSitter.Internal.Binding where
+module TreeSitter.Prismatic.Internal.Binding where
 #strict_import
 
 #capi_start_header "tree_sitter/api.h"
@@ -689,6 +689,15 @@ module Data.Prismatic.TreeSitter.Internal.Binding where
 
 -- | Free any dynamically-allocated resources for this language.
 #capi ts_language_delete , ConstPtr <TSLanguage> -> IO ()
+
+#capi_stop_header "tree_sitter/api.h"
+#capi_start_header "tree_sitter_ffi_bridge.h"
+
+-- | Free any dynamically-allocated resources for this language.
+-- Accepts a non-const pointer for use in finalizers
+#capi ts_language_delete_nonconst , Ptr <TSLanguage> -> IO ()
+#capi_stop_header "tree_sitter_ffi_bridge.h"
+#capi_start_header "tree_sitter/api.h"
 
 -- | Get the number of distinct node types in the language.
 #capi ts_language_symbol_count , ConstPtr <TSLanguage> -> Word32

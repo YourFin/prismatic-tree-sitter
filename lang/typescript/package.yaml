@@ -1,0 +1,20 @@
+name: prismatic-tree-sitter-lang-typescript
+_common: !include "../../package-common.yaml"
+
+<<: *commonTopLevel
+
+library:
+  dependencies:
+   - prismatic-tree-sitter-core
+  source-dirs: src
+  include-dirs:
+    - vendor/typescript/src
+    - vendor/bindings/c
+  c-sources:
+    - vendor/typescript/src/parser.c
+    - vendor/typescript/src/scanner.c
+  cc-options:
+    - -std=c99
+    # https://github.com/amartani/covers/commit/00d61bd5aa8eaa7528652b3ea609d0af9fcf03ed
+    - -D_GNU_SOURCE
+    - -Wno-gnu-folding-constant

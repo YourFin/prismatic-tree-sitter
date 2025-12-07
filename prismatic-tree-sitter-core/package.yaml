@@ -4,6 +4,10 @@ _common: !include "../package-common.yaml"
 <<: *commonTopLevel
 
 library:
+  dependencies:
+   - template-haskell >= 2.20 && < 3
+   - text
+   - bytestring
   source-dirs: src
   include-dirs:
     - vendor/lib/include

@@ -1,6 +1,35 @@
+
+cabal-build: hpack
+    cabal build all
+
+hpack:
+    #!/usr/bin/env -S nu -n
+    let cwd = "." | path expand
+    let dirs = (open cabal.project
+      | lines
+      | skip 1
+      | take until { $in =~ "^\\s+$" }
+      | each { str trim }
+      | each { glob $in }
+      | flatten
+      | each { |f|
+          if ($f | path type) == "file" {
+            $f | path dirname
+          } else {
+            $f
+          }
+        }
+      | where (($"($it)/package.yaml" | path type) == file))
+    for dir in $dirs {
+      cd $dir
+      print $"hpack in /($dir | path relative-to $cwd):"
+      hpack
+      print ""
+    }
+
 [group('subtree')]
 subtree-list:
-    #!/usr/bin/env nu
+    #!/usr/bin/env -S nu -n
     open .subtree.toml | transpose path details
 
 
