@@ -93,6 +93,8 @@ void ts_query_cursor_exec_(TSQueryCursor *self, const TSQuery *query,
 bool ts_query_cursor_set_point_range_(TSQueryCursor *self, TSPoint *start_point,
                                       TSPoint *end_point);
 
-void ts_query_cursor_exec_with_options_(TSQueryCursor *self, const TSQuery *query, TSNode *node, const TSQueryCursorOptions *query_options);
+void ts_query_cursor_exec_with_options_(
+    TSQueryCursor *self, const TSQuery *query, TSNode *node,
+    const TSQueryCursorOptions *query_options);
 
 #endif // TREE_SITTER_FFI_BRIDGE_H_

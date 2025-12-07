@@ -2,15 +2,19 @@
 
 typedef struct WrappedPayload {
   void *real_payload;
-  const char *(*real_read)(void *payload, uint32_t byte_index, TSPoint *position, uint32_t *bytes_read);
+  const char *(*real_read)(void *payload, uint32_t byte_index,
+                           TSPoint *position, uint32_t *bytes_read);
 } WrappedPayload;
 
-const char *adapted_tsinput_read(void* payload, uint32_t byte_index, TSPoint position, uint32_t *bytes_read) {
-  WrappedPayload *w = (WrappedPayload*)payload;
+static const char *adapted_tsinput_read(void *payload, uint32_t byte_index,
+                                        TSPoint position,
+                                        uint32_t *bytes_read) {
+  WrappedPayload *w = (WrappedPayload *)payload;
   return (*w->real_read)(w->real_payload, byte_index, &position, bytes_read);
 }
 
-void adapt_ts_input(TSInput_ *input, WrappedPayload *out_p, TSInput *out) {
+static inline void adapt_ts_input(TSInput_ *input, WrappedPayload *out_p,
+                                  TSInput *out) {
   out_p->real_payload = input->payload;
   out_p->real_read = input->read;
   out->payload = out_p;
@@ -64,7 +68,8 @@ void ts_node_parent_(TSNode *self, TSNode *out) {
   *out = ts_node_parent(*self);
 }
 
-void ts_node_child_with_descendant_(TSNode *self, TSNode *descendant, TSNode *out) {
+void ts_node_child_with_descendant_(TSNode *self, TSNode *descendant,
+                                    TSNode *out) {
   *out = ts_node_child_with_descendant(*self, *descendant);
 }
 
@@ -76,7 +81,8 @@ void ts_node_named_child_(TSNode *self, uint32_t child_index, TSNode *out) {
   *out = ts_node_named_child(*self, child_index);
 }
 
-void ts_node_child_by_field_name_(TSNode *self, const char *name, uint32_t name_length, TSNode *out) {
+void ts_node_child_by_field_name_(TSNode *self, const char *name,
+                                  uint32_t name_length, TSNode *out) {
   *out = ts_node_child_by_field_name(*self, name, name_length);
 }
 
@@ -104,23 +110,28 @@ void ts_node_first_child_for_byte_(TSNode *self, uint32_t byte, TSNode *out) {
   *out = ts_node_first_child_for_byte(*self, byte);
 }
 
-void ts_node_first_named_child_for_byte_(TSNode *self, uint32_t byte, TSNode *out) {
+void ts_node_first_named_child_for_byte_(TSNode *self, uint32_t byte,
+                                         TSNode *out) {
   *out = ts_node_first_named_child_for_byte(*self, byte);
 }
 
-void ts_node_descendant_for_byte_range_(TSNode *self, uint32_t start, uint32_t end, TSNode *out) {
+void ts_node_descendant_for_byte_range_(TSNode *self, uint32_t start,
+                                        uint32_t end, TSNode *out) {
   *out = ts_node_descendant_for_byte_range(*self, start, end);
 }
 
-void ts_node_descendant_for_point_range_(TSNode *self, TSPoint *start, TSPoint *end, TSNode *out) {
+void ts_node_descendant_for_point_range_(TSNode *self, TSPoint *start,
+                                         TSPoint *end, TSNode *out) {
   *out = ts_node_descendant_for_point_range(*self, *start, *end);
 }
 
-void ts_node_named_descendant_for_byte_range_(TSNode *self, uint32_t start, uint32_t end, TSNode *out) {
+void ts_node_named_descendant_for_byte_range_(TSNode *self, uint32_t start,
+                                              uint32_t end, TSNode *out) {
   *out = ts_node_named_descendant_for_byte_range(*self, start, end);
 }
 
-void ts_node_named_descendant_for_point_range_(TSNode *self, TSPoint *start, TSPoint *end, TSNode *out) {
+void ts_node_named_descendant_for_point_range_(TSNode *self, TSPoint *start,
+                                               TSPoint *end, TSNode *out) {
   *out = ts_node_named_descendant_for_point_range(*self, *start, *end);
 }
 
@@ -140,13 +151,9 @@ void ts_parser_set_logger_(TSParser *self, TSLogger *logger) {
   ts_parser_set_logger(self, *logger);
 }
 
-const char *ts_node_type_(TSNode *self) {
-  return ts_node_type(*self);
-}
+const char *ts_node_type_(TSNode *self) { return ts_node_type(*self); }
 
-TSSymbol ts_node_symbol_(TSNode *self) {
-  return ts_node_symbol(*self);
-}
+TSSymbol ts_node_symbol_(TSNode *self) { return ts_node_symbol(*self); }
 
 const TSLanguage *ts_node_language_(TSNode *self) {
   return ts_node_language(*self);
@@ -160,45 +167,25 @@ TSSymbol ts_node_grammar_symbol_(TSNode *self) {
   return ts_node_grammar_symbol(*self);
 }
 
-uint32_t ts_node_start_byte_(TSNode *self) {
-  return ts_node_start_byte(*self);
-}
+uint32_t ts_node_start_byte_(TSNode *self) { return ts_node_start_byte(*self); }
 
-uint32_t ts_node_end_byte_(TSNode *self) {
-  return ts_node_end_byte(*self);
-}
+uint32_t ts_node_end_byte_(TSNode *self) { return ts_node_end_byte(*self); }
 
-char *ts_node_string_(TSNode *self) {
-  return ts_node_string(*self);
-}
+char *ts_node_string_(TSNode *self) { return ts_node_string(*self); }
 
-bool ts_node_is_null_(TSNode *self) {
-  return ts_node_is_null(*self);
-}
+bool ts_node_is_null_(TSNode *self) { return ts_node_is_null(*self); }
 
-bool ts_node_is_named_(TSNode *self) {
-  return ts_node_is_named(*self);
-}
+bool ts_node_is_named_(TSNode *self) { return ts_node_is_named(*self); }
 
-bool ts_node_is_missing_(TSNode *self) {
-  return ts_node_is_missing(*self);
-}
+bool ts_node_is_missing_(TSNode *self) { return ts_node_is_missing(*self); }
 
-bool ts_node_is_extra_(TSNode *self) {
-  return ts_node_is_extra(*self);
-}
+bool ts_node_is_extra_(TSNode *self) { return ts_node_is_extra(*self); }
 
-bool ts_node_has_changes_(TSNode *self) {
-  return ts_node_has_changes(*self);
-}
+bool ts_node_has_changes_(TSNode *self) { return ts_node_has_changes(*self); }
 
-bool ts_node_has_error_(TSNode *self) {
-  return ts_node_has_error(*self);
-}
+bool ts_node_has_error_(TSNode *self) { return ts_node_has_error(*self); }
 
-bool ts_node_is_error_(TSNode *self) {
-  return ts_node_is_error(*self);
-}
+bool ts_node_is_error_(TSNode *self) { return ts_node_is_error(*self); }
 
 TSStateId ts_node_parse_state_(TSNode *self) {
   return ts_node_parse_state(*self);
@@ -212,7 +199,8 @@ const char *ts_node_field_name_for_child_(TSNode *self, uint32_t child_index) {
   return ts_node_field_name_for_child(*self, child_index);
 }
 
-const char *ts_node_field_name_for_named_child_(TSNode *self, uint32_t named_child_index) {
+const char *ts_node_field_name_for_named_child_(TSNode *self,
+                                                uint32_t named_child_index) {
   return ts_node_field_name_for_named_child(*self, named_child_index);
 }
 
@@ -236,18 +224,23 @@ void ts_tree_cursor_reset_(TSTreeCursor *self, TSNode *node) {
   ts_tree_cursor_reset(self, *node);
 }
 
-int64_t ts_tree_cursor_goto_first_child_for_point_(TSTreeCursor *self, TSPoint *goal_point) {
+int64_t ts_tree_cursor_goto_first_child_for_point_(TSTreeCursor *self,
+                                                   TSPoint *goal_point) {
   return ts_tree_cursor_goto_first_child_for_point(self, *goal_point);
 }
 
-void ts_query_cursor_exec_(TSQueryCursor *self, const TSQuery *query, TSNode *node) {
+void ts_query_cursor_exec_(TSQueryCursor *self, const TSQuery *query,
+                           TSNode *node) {
   ts_query_cursor_exec(self, query, *node);
 }
 
-bool ts_query_cursor_set_point_range_(TSQueryCursor *self, TSPoint *start_point, TSPoint *end_point) {
+bool ts_query_cursor_set_point_range_(TSQueryCursor *self, TSPoint *start_point,
+                                      TSPoint *end_point) {
   return ts_query_cursor_set_point_range(self, *start_point, *end_point);
 }
 
-void ts_query_cursor_exec_with_options_(TSQueryCursor *self, const TSQuery *query, TSNode *node, const TSQueryCursorOptions *query_options) {
+void ts_query_cursor_exec_with_options_(
+    TSQueryCursor *self, const TSQuery *query, TSNode *node,
+    const TSQueryCursorOptions *query_options) {
   ts_query_cursor_exec_with_options(self, query, *node, query_options);
 }
