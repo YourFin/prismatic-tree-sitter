@@ -1,8 +1,17 @@
-
 cabal-build: hpack
     cabal build all
 
-hpack:
+gen-cabal-project:
+    #!/usr/bin/env -S nu -n
+    glob lang/*/*.cabal
+      | each { path dirname | path relative-to ('.' | path expand) }
+      | prepend "prismatic-tree-sitter-core"
+      | each { $"  ($in)" }
+      | prepend [ "packages:" ]
+      | str join "\n"
+      | save -f cabal.project
+
+hpack: gen-cabal-project
     #!/usr/bin/env -S nu -n
     let cwd = "." | path expand
     let dirs = (open cabal.project
