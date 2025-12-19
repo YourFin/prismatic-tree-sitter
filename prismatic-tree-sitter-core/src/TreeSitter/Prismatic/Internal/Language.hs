@@ -1,11 +1,16 @@
 module TreeSitter.Prismatic.Internal.Language where
 
+import Control.Exception (Exception, throwIO)
+import Data.Function ((&))
 import Data.Ix (Ix)
 import Data.Kind (Type)
+import Data.STRef (newSTRef)
 import Data.Text (Text)
-import Data.Word (Word8)
+import Data.Text.Foreign qualified as Text
+import Data.Word (Word16, Word32, Word8)
 import Foreign.C.ConstPtr (ConstPtr (..))
-import Foreign.ForeignPtr (ForeignPtr, newForeignPtr)
+import Foreign.ForeignPtr (ForeignPtr, newForeignPtr, withForeignPtr)
+import Foreign.Ptr (Ptr, nullPtr)
 import GHC.Generics (Generic)
 import TreeSitter.Prismatic.Internal.Binding
 
@@ -48,10 +53,56 @@ data LangVersion = LangVersion
     }
     deriving (Eq, Ord, Show, Generic)
 
--- TODO: Enforce language names are valid
--- utf-8 in unit test
--- name :: Language -> Text
--- name l =
---    unlanguage l
---        & c'ts_language_name
---        & unConstPtr
+-- * Language properties; intended to be retrieved from template haskell
+
+langName :: Lang a -> IO Text
+langName (Lang fp) = withForeignConstPtr fp $ \langPtr -> do
+    let namePtr = unConstPtr $ c'ts_language_name langPtr
+    if (namePtr == nullPtr)
+        then
+            langError "ts_language_name returned null pointer"
+        else do
+            Text.fromPtr0 namePtr
+
+langSymbolCount :: Lang a -> IO Word16
+langSymbolCount (Lang fp) = withForeignConstPtr fp \ptr -> do
+    let count = c'ts_language_symbol_count ptr
+    if (count > (maxBound @Word16 & fromIntegral))
+        then
+            -- This covers for what appears to be a bug in the language interface
+            langError ("More symbols reported (" <> show count <> ") than can be named in a tree sitter language")
+        else
+            pure (fromIntegral count)
+
+langSymbolName :: Lang a -> Word16 -> IO Text
+langSymbolName (Lang fp) sym = withForeignConstPtr fp $ \ptr ->
+    c'ts_language_symbol_name ptr sym
+        & unConstPtr
+        & Text.fromPtr0
+
+langFieldCount :: Lang a -> IO Word16
+langFieldCount (Lang fp) = withForeignConstPtr fp \ptr -> do
+    let count = c'ts_language_field_count ptr
+    if (count > (maxBound @Word16 & fromIntegral))
+        then
+            -- This covers for what appears to be a bug in the language interface
+            langError ("More fields reported (" <> show count <> ") than can be named in a tree sitter language")
+        else
+            pure (fromIntegral count)
+
+langFieldName :: Lang a -> Word16 -> IO Text
+langFieldName (Lang fp) fieldId = withForeignConstPtr fp $ \ptr ->
+    c'ts_language_field_name_for_id ptr fieldId
+        & unConstPtr
+        & Text.fromPtr0
+
+newtype TreesitterLanguageAccessError = TreesitterLanguageAccessError String
+    deriving stock (Show)
+
+instance Exception TreesitterLanguageAccessError
+
+langError :: String -> IO a
+langError = throwIO . TreesitterLanguageAccessError
+
+withForeignConstPtr :: ForeignPtr a -> (ConstPtr a -> IO b) -> IO b
+withForeignConstPtr fp closure = withForeignPtr fp $ \ptr -> closure (ConstPtr ptr)

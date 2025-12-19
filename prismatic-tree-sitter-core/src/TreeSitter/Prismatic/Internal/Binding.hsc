@@ -712,7 +712,7 @@ module TreeSitter.Prismatic.Internal.Binding where
 #capi ts_language_field_count , ConstPtr <TSLanguage> -> Word32
 
 -- | Get the field name string for the given numerical id.
-#capi ts_language_field_name_for_id , ConstPtr <TSLanguage> -> <TSFieldId> -> ConstPtr CChar
+#capi ts_language_field_name_for_id , ConstPtr <TSLanguage> -> <TSFieldId> -> ConstPtr Word8
 
 -- | Get the numerical id for the given field name string.
 #capi ts_language_field_id_for_name , ConstPtr <TSLanguage> -> ConstPtr CChar -> Word32 -> <TSFieldId>
@@ -724,7 +724,7 @@ module TreeSitter.Prismatic.Internal.Binding where
 #capi ts_language_subtypes , ConstPtr <TSLanguage> -> <TSSymbol> -> Ptr Word32 -> ConstPtr <TSSymbol>
 
 -- | Get a node type string for the given numerical id.
-#capi ts_language_symbol_name , ConstPtr <TSLanguage> -> <TSSymbol> -> ConstPtr CChar
+#capi ts_language_symbol_name , ConstPtr <TSLanguage> -> <TSSymbol> -> ConstPtr Word8
 
 -- | Check whether the given node type id belongs to named nodes, anonymous nodes, or hidden nodes.
 #capi ts_language_symbol_type , ConstPtr <TSLanguage> -> <TSSymbol> -> <TSSymbolType>
@@ -742,7 +742,7 @@ module TreeSitter.Prismatic.Internal.Binding where
 #capi ts_language_next_state , ConstPtr <TSLanguage> -> <TSStateId> -> <TSSymbol> -> <TSStateId>
 
 -- | Get the name of this language.
-#capi ts_language_name , ConstPtr <TSLanguage> -> ConstPtr CChar
+#capi ts_language_name , ConstPtr <TSLanguage> -> ConstPtr Word8
 
 -- * Section - Lookahead Iterator
 
