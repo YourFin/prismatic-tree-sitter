@@ -1,0 +1,12 @@
+# Monokai Aqua (dark variant with aqua tones)
+name = "Monokai Aqua"
+variant = "dark"
+
+[colors]
+bg = "#0d1926"
+keyword = "#ff6188"
+function = "#78dce8"
+string = "#a9dc76"
+type = "#ffd866"
+number = "#ab9df2"
+macro = "#78dce8"

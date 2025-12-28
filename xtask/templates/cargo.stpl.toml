@@ -1,0 +1,68 @@
+# <%= generated_disclaimer %>
+
+[package]
+name = "<%= crate_name %>"
+version = "<%= workspace_version %>"
+edition = "2024"
+rust-version = "1.85"
+description = "<%= grammar_name %> grammar for arborium (tree-sitter bindings)"
+authors = ["Amos Wenger <amos@bearcove.eu>"]
+license = "<%= license %>"
+readme = "README.md"
+repository = "https://github.com/bearcove/arborium"
+homepage = "https://github.com/bearcove/arborium"
+documentation = "https://docs.rs/<%= crate_name %>"
+keywords = ["tree-sitter", "<%= grammar_id %>", "syntax-highlighting", "<%= tag %>"]
+categories = ["parsing", "text-processing"]
+include = [
+    "src/**/*",
+    "grammar/**/*",
+    "queries/**/*",
+    "corpus/**/*",
+    "sample.*",
+    "samples/**/*",
+    "build.rs",
+    "Cargo.toml",
+    "README.md",
+    ".arborium-hash",
+]
+
+[package.metadata.cargo-shear]
+ignored = ["arborium-sysroot"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+tree-sitter-language = { version = "0.1", path = "<%= shared_rel %>/arborium-tree-sitter/language" }
+<% for dep in highlights_prepend_deps { %>
+<%= dep.crate_name %> = { version = "<%= dep_version %>", path = "<%= dep.rel_path %>" }
+<% } %>
+<% for dep in injection_deps { %>
+<%= dep.crate_name %> = { version = "<%= dep_version %>", path = "<%= dep.rel_path %>", optional = true }
+<% } %>
+<% if !injection_deps.is_empty() { %>
+
+[features]
+default = ["injections"]
+injections = [<%- injection_deps.iter().map(|d| format!("\"{}\"", d.crate_name)).collect::<Vec<_>>().join(", ") %>]
+<% } %>
+
+[dev-dependencies]
+arborium-test-harness = { version = "<%= dep_version %>", path = "<%= shared_rel %>/arborium-test-harness" }
+libtest-mimic = "0.8"
+
+# WASM allocator (only needed on WASM targets)
+[target.'cfg(target_family = "wasm")'.dependencies]
+arborium-sysroot = { version = "<%= dep_version %>", path = "<%= shared_rel %>/arborium-sysroot" }
+
+[build-dependencies]
+cc = "1"
+
+<% if enable_corpus_tests { %>
+
+[[test]]
+name = "corpus"
+path = "tests/corpus.rs"
+harness = false
+<% } %>

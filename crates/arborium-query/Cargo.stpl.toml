@@ -1,0 +1,23 @@
+[package]
+name = "arborium-query"
+version = "<%= version %>"
+edition = "2024"
+description = "query grammar for arborium (tree-sitter bindings)"
+license = "MIT"
+repository = "https://github.com/bearcove/arborium"
+keywords = ["tree-sitter", "query", "syntax-highlighting"]
+categories = ["parsing", "text-processing"]
+readme = "README.md"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+arborium-tree-sitter = { version = "<%= version %>", path = "../arborium-tree-sitter" }
+arborium-sysroot = { version = "<%= version %>", path = "../arborium-sysroot" }
+
+[dev-dependencies]
+arborium-test-harness = { version = "<%= version %>", path = "../arborium-test-harness" }
+
+[build-dependencies]
+cc = { version = "1", features = ["parallel"] }

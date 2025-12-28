@@ -1,0 +1,11 @@
+project('myapp', 'c',
+  version: '1.0.0',
+  default_options: ['warning_level=3'])
+
+src = files('src/main.c', 'src/utils.c')
+
+executable('myapp', src,
+  install: true,
+  dependencies: [
+    dependency('glib-2.0'),
+  ])

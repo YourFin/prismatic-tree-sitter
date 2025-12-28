@@ -1,0 +1,12 @@
+# Catppuccin Frappé (dark)
+name = "Frappé"
+variant = "dark"
+
+[colors]
+bg = "#303446"
+keyword = "#ca9ee6"
+function = "#8caaee"
+string = "#a6d189"
+type = "#e5c890"
+number = "#ef9f76"
+macro = "#81c8be"

@@ -1,0 +1,18 @@
+[package]
+name = "arborium-<%= grammar_id %>-plugin"
+version = "0.1.0"
+edition = "2024"
+description = "<%= grammar_id %> grammar plugin for arborium"
+license = "MIT"
+repository = "https://github.com/bearcove/arborium"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+arborium-plugin-runtime = { path = "<%= shared_rel %>/arborium-plugin-runtime" }
+arborium-wire = { path = "<%= shared_rel %>/arborium-wire" }
+"<%= grammar_crate_name %>" = { path = "<%= crate_rel %>" }
+arborium-sysroot = { path = "<%= shared_rel %>/arborium-sysroot" }
+wasm-bindgen = "=0.2.106"
+serde-wasm-bindgen = "0.6"

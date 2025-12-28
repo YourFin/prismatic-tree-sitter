@@ -1,0 +1,12 @@
+# Catppuccin Macchiato (dark)
+name = "Macchiato"
+variant = "dark"
+
+[colors]
+bg = "#24273a"
+keyword = "#c6a0f6"
+function = "#8aadf4"
+string = "#a6da95"
+type = "#eed49f"
+number = "#f5a97f"
+macro = "#8bd5ca"

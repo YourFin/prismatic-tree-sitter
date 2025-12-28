@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title | default("Home") }}{% endblock %}
+
+{% block content %}
+<ul>
+{% for user in users %}
+    <li class="{{ loop.cycle('odd', 'even') }}">
+        {{ user.name }} - {{ user.email }}
+        {% if user.admin %}(Admin){% endif %}
+    </li>
+{% else %}
+    <li>No users found</li>
+{% endfor %}
+</ul>
+{% endblock %}
