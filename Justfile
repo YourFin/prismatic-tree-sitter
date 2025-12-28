@@ -1,6 +1,13 @@
 cabal-build: hpack
     cabal build all
 
+gen-arborium:
+    #!/usr/bin/env -S nu -n
+    # ref: xtask/src/util.rs: find_repo_root
+    mkdir lang/vendor/arborium/.git
+    cd lang/vendor/arborium
+    cargo xtask gen
+
 gen-cabal-project:
     #!/usr/bin/env -S nu -n
     glob lang/*/*.cabal

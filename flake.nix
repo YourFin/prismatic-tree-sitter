@@ -56,6 +56,7 @@
                   nushell
                   fzf
                   curl
+                  tree-sitter
                 ];
               };
               # Programs you want to make available in the shell.
