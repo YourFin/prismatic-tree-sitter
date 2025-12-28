@@ -5,3 +5,7 @@ tag = "v0.25.10"
 ["lang/typescript/vendor"]
 src = "tree-sitter/tree-sitter-typescript"
 tag = "v0.23.2"
+
+["lang/vendor/arborium/"]
+src = "bearcove/arborium"
+tag = "v2.4.6"

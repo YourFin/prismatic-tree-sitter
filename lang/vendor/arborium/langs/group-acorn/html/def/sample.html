@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hello World</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .btn { background: #3498db; color: white; }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <h1>Welcome</h1>
+        <button class="btn" id="greet">Click me</button>
+    </main>
+    <script>
+        document.getElementById('greet').addEventListener('click', () => {
+            const name = prompt('What is your name?');
+            alert(`Hello, ${name}!`);
+        });
+    </script>
+</body>
+</html>

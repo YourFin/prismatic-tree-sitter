@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>arborium - Syntax Highlighting Demo</title>
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%2350C878' d='m7.2 14.2c.8-1 1.6-1.8 2.4-2.4 1.5-1.3 2.8-1.8 2.8-1.8s-.7 1.1-1.8 2.7c-.2.4-.5.8-.8 1.3-.3.4-.5.9-.8 1.4s-.5 1-.8 1.5c-.2.5-.6 1.1-.8 1.6s-.5 1.1-.7 1.6c-.1.2-.2.5-.3.7 3.3 1.9 7.7 1.5 10.4-1.4 5-5.4.6-7.7 5.2-17.2 0 0-10.2-2.1-17.5 5.1-3.3 3.3-3.3 8.6 0 12 .2-.6.4-1.2.7-1.8.5-1.2 1.2-2.4 2-3.3z'/></svg>"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+            rel="stylesheet"
+        />
+        <link
+            rel="preload"
+            href="IosevkaFtl-Regular.woff2"
+            as="font"
+            type="font/woff2"
+            crossorigin
+        />
+        <link rel="preload" href="IosevkaFtl-Bold.woff2" as="font" type="font/woff2" crossorigin />
+        <link rel="stylesheet" href="styles.css" />
+        <%- theme_css_link %>
+    </head>
+    <body>
+        <div class="container">
+            <!-- Hidden icons for JS use -->
+            <div style="display: none">
+                <%- icons["mdi:calendar"] %><%- icons["mdi:account"] %><%- icons["mdi:wikipedia"]
+                %><%- icons["simple-icons:webassembly"] %><%- icons["devicon-plain:rust"] %><%-
+                icons["mdi:apple"] %><%- icons["mdi:linux"] %><%- icons["mdi:microsoft-windows"]
+                %><%- icons["mdi:check-circle"] %><%- icons["mdi:chevron-down"] %><%-
+                icons["mdi:shuffle-variant"] %><%- icons["mdi:git"] %><%- icons["mdi:scale-balance"]
+                %><%- icons["mdi:language-html5"] %><%- icons["mdi:nodejs"] %><%- icons["mdi:heart"] %><%-
+                icons["mdi:cat"] %><%- icons["mdi:lightning-bolt"] %><%- icons["mdi:package-variant-closed"]
+                %><%- icons["mdi:zip-box"] %><%- icons["mdi:file-outline"] %>
+            </div>
+
+            <div class="page-header">
+                <h1>
+                    <span class="arborium-icon"
+                        ><svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            width="1em"
+                            height="1em"
+                        >
+                            <path
+                                fill="#50C878"
+                                d="m7.2 14.2c.8-1 1.6-1.8 2.4-2.4 1.5-1.3 2.8-1.8 2.8-1.8s-.7 1.1-1.8 2.7c-.2.4-.5.8-.8 1.3-.3.4-.5.9-.8 1.4s-.5 1-.8 1.5c-.2.5-.6 1.1-.8 1.6s-.5 1.1-.7 1.6c-.1.2-.2.5-.3.7 3.3 1.9 7.7 1.5 10.4-1.4 5-5.4.6-7.7 5.2-17.2 0 0-10.2-2.1-17.5 5.1-3.3 3.3-3.3 8.6 0 12 .2-.6.4-1.2.7-1.8.5-1.2 1.2-2.4 2-3.3z"
+                            /></svg
+                    ></span>
+                    arborium
+                </h1>
+                <span class="tagline" id="tagline"></span>
+            </div>
+
+            <div class="main-layout">
+                <aside class="about-panel">
+                    <div class="about-panel-header">arborium</div>
+                    <p>tree-sitter highlighting</p>
+                    <p>Native &amp; WASM targets</p>
+                    <p>Queries included</p>
+                    <div class="about-panel-links">
+                        <a href="https://github.com/bearcove/arborium">github</a>
+                        <a href="https://docs.rs/arborium">docs</a>
+                        <a href="https://crates.io/crates/arborium">crates.io</a>
+                    </div>
+                </aside>
+
+                <div class="editor-container" id="demo">
+                    <div class="loading-overlay">
+                        <span class="loading-message" id="loading-message">Loading grammar</span>
+                        <div class="loading-dots">
+                            <span class="loading-dot"></span>
+                            <span class="loading-dot"></span>
+                            <span class="loading-dot"></span>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <div class="editor-toolbar">
+                            <div class="toolbar-controls">
+                                <div class="lang-picker" id="lang-picker">
+                                    <div class="lang-picker-label" id="lang-label">
+                                        <span class="lang-icon"></span>
+                                        <span class="lang-name">Select a language...</span>
+                                        <span class="picker-caret"
+                                            ><%- icons["mdi:chevron-down"] %></span
+                                        >
+                                    </div>
+                                    <input
+                                        type="text"
+                                        class="lang-picker-input"
+                                        id="lang-input"
+                                        placeholder="Type to search..."
+                                        autocomplete="off"
+                                    />
+                                    <div class="lang-dropdown" id="lang-dropdown"></div>
+                                </div>
+                                <div class="theme-picker" id="theme-picker">
+                                    <div class="theme-picker-label" id="theme-label">
+                                        <span class="theme-name">Select a theme...</span>
+                                        <span class="picker-caret"
+                                            ><%- icons["mdi:chevron-down"] %></span
+                                        >
+                                    </div>
+                                    <input
+                                        type="text"
+                                        class="theme-picker-input"
+                                        id="theme-input"
+                                        placeholder="Type to search..."
+                                        autocomplete="off"
+                                    />
+                                    <div class="theme-dropdown" id="theme-dropdown"></div>
+                                </div>
+                                <div class="mode-toggle" id="mode-toggle">
+                                    <button
+                                        class="mode-btn"
+                                        data-mode="auto"
+                                        id="mode-auto"
+                                        title="Follow system theme"
+                                    >
+                                        <span class="mode-icon"
+                                            ><%- icons["mdi:theme-light-dark"] %></span
+                                        >
+                                    </button>
+                                    <button
+                                        class="mode-btn"
+                                        data-mode="dark"
+                                        id="mode-dark"
+                                        title="Dark themes"
+                                    >
+                                        <span class="mode-icon"
+                                            ><%- icons["mdi:weather-night"] %></span
+                                        >
+                                    </button>
+                                    <button
+                                        class="mode-btn"
+                                        data-mode="light"
+                                        id="mode-light"
+                                        title="Light themes"
+                                    >
+                                        <span class="mode-icon"
+                                            ><%- icons["mdi:weather-sunny"] %></span
+                                        >
+                                    </button>
+                                </div>
+                                <button
+                                    class="random-btn"
+                                    id="random-btn"
+                                    title="Random language & theme"
+                                >
+                                    <%- icons["mdi:shuffle-variant"] %> Randomize
+                                </button>
+                            </div>
+                        </div>
+                        <div class="editor-scroll">
+                            <div class="editor-layers">
+                                <div id="output" class="output">
+                                    <span class="loading">Loading WASM module...</span>
+                                </div>
+                                <textarea id="source" spellcheck="false"></textarea>
+                            </div>
+                        </div>
+                        <div id="sample-bar" class="sample-bar"></div>
+                    </div>
+                </div>
+
+                <aside id="lang-info-panel" class="lang-info-panel"></aside>
+            </div>
+
+            <div id="status" class="status"></div>
+
+            <nav class="section-nav" id="section-nav">
+                <a href="#demo" class="nav-link active">Demo</a>
+                <a href="#about" class="nav-link">About</a>
+                <a href="#get-started" class="nav-link">Get Started</a>
+                <a href="#integrations" class="nav-link">Integrations</a>
+                <a href="#languages" class="nav-link">Languages</a>
+                <a href="#themes" class="nav-link">Themes</a>
+                <a href="#html-tags" class="nav-link">HTML Tags</a>
+                <a href="#size-comparison" class="nav-link">Sizes</a>
+                <a href="#wasm-build" class="nav-link">Build</a>
+                <a href="#faq" class="nav-link">FAQ</a>
+            </nav>
+
+            <div class="cards-container">
+                <div class="about-card solution" id="about">
+                    <h3>arborium</h3>
+                    <p>Finding good tree-sitter grammars is hard. In arborium, every grammar:</p>
+                    <ul class="check-list">
+                        <li><%- icons["mdi:check-circle"] %> Is generated with tree-sitter 0.26</li>
+                        <li>
+                            <%- icons["mdi:check-circle"] %> Builds for WASM &amp; native via cargo
+                        </li>
+                        <li><%- icons["mdi:check-circle"] %> Has working highlight queries</li>
+                    </ul>
+                    <p>
+                        We hand-picked grammars, added missing highlight queries, and updated them
+                        to the latest tree-sitter. Tree-sitter parsers compiled to WASM need libc
+                        symbols (especially a C allocator)—we provide
+                        <a href="https://github.com/bearcove/arborium/tree/main/crates/arborium-sysroot">arborium-sysroot</a>
+                        which re-exports dlmalloc and other essentials for wasm32-unknown-unknown.
+                    </p>
+                </div>
+
+                <div class="about-card">
+                    <h3>Output formats</h3>
+                    <p>
+                        <strong>HTML</strong> — custom elements like
+                        <code>&lt;a-k&gt;</code> instead of
+                        <code>&lt;span class="keyword"&gt;</code>. More compact markup. No
+                        JavaScript required.
+                    </p>
+                    <div class="compare-boxes">
+                        <div class="compare-box old">
+                            <span class="compare-label">Traditional</span>
+                            <code class="language-<%= code.html_example_traditional.lang %>"><%= code.html_example_traditional.source %></code>
+                        </div>
+                        <div class="compare-box new">
+                            <span class="compare-label">arborium</span>
+                            <code class="language-<%= code.html_example_arborium.lang %>"><%= code.html_example_arborium.source %></code>
+                        </div>
+                    </div>
+                    <p><strong>ANSI</strong> — 24-bit true color for terminal applications.</p>
+                </div>
+
+                <div class="about-card">
+                    <h3>Platforms</h3>
+                    <div class="platform-section">
+                        <div class="platform-group">
+                            <div class="platform-logos">
+                                <span class="platform-logo" title="macOS"
+                                    ><%- icons["mdi:apple"] %></span
+                                >
+                                <span class="platform-logo" title="Linux"
+                                    ><%- icons["mdi:linux"] %></span
+                                >
+                                <span class="platform-logo" title="Windows"
+                                    ><%- icons["mdi:microsoft-windows"] %></span
+                                >
+                            </div>
+                            <p>
+                                <strong>macOS, Linux, Windows</strong> — tree-sitter handles
+                                generating native crates for these platforms. Just add the
+                                dependency and go.
+                            </p>
+                        </div>
+                        <div class="platform-group wasm">
+                            <div class="platform-logos">
+                                <span class="platform-logo" title="WebAssembly"
+                                    ><%- icons["simple-icons:webassembly"] %></span
+                                >
+                            </div>
+                            <p>
+                                <strong>WebAssembly</strong> — that one's hard. Compiling Rust to
+                                WASM with C code that assumes a standard library is tricky. We
+                                provide a sysroot that makes this work, enabling
+                                Rust-on-the-frontend scenarios like this demo.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="about-card" id="get-started">
+                    <h3>Get Started</h3>
+                    <div class="get-started-options">
+                        <div class="get-started-option">
+                            <h4><%- icons["devicon-plain:rust"] %> Rust (native or WASM)</h4>
+                            <p>Add to your <code>Cargo.toml</code>:</p>
+                            <pre class="code-block"><code class="language-<%= code.cargo_toml.lang %>"><%= code.cargo_toml.source %></code></pre>
+                            <p>Then highlight code:</p>
+                            <pre class="code-block"><code class="language-<%= code.rust_highlight.lang %>"><%= code.rust_highlight.source %></code></pre>
+                        </div>
+                        <div class="get-started-option">
+                            <h4><%- icons["mdi:language-html5"] %> Script tag (zero config)</h4>
+                            <p>
+                                Add this to your HTML and all
+                                <code>&lt;pre&gt;&lt;code&gt;</code> blocks get highlighted
+                                automatically:
+                            </p>
+                            <pre class="code-block"><code class="language-<%= code.script_tag.lang %>"><%= code.script_tag.source %></code></pre>
+                            <p>Your code blocks should look like this:</p>
+                            <pre
+                                class="code-block"
+                            ><code class="language-<%= code.code_block_examples.lang %>"><%= code.code_block_examples.source %></code></pre>
+                            <p>Configure via data attributes:</p>
+                            <pre class="code-block"><code class="language-<%= code.data_attributes.lang %>"><%= code.data_attributes.source %></code></pre>
+                            <p>
+                                With <code>data-manual</code>, call
+                                <code>window.arborium.highlightAll()</code> when ready.
+                            </p>
+                            <p><a href="iife-demo.html">See the IIFE demo →</a></p>
+                        </div>
+                        <div class="get-started-option">
+                            <h4><%- icons["mdi:nodejs"] %> npm (ESM)</h4>
+                            <p>For bundlers or manual control:</p>
+                            <pre class="code-block"><code class="language-<%= code.js_esm.lang %>"><%= code.js_esm.source %></code></pre>
+                            <p>Grammars are loaded on-demand from <a href="https://www.jsdelivr.com/">jsDelivr</a> (configurable).</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="about-card" id="integrations">
+                    <h3>Integrations</h3>
+                    <div class="integrations-grid">
+                        <div class="integration-item">
+                            <h4><%- icons["mdi:book-open-page-variant"] %> Your crate docs</h4>
+                            <p>
+                                Highlight TOML, shell, and other languages in your rustdoc. Create
+                                <code>arborium-header.html</code>:
+                            </p>
+                            <pre class="code-block"><code class="language-<%= code.docsrs_script.lang %>"><%= code.docsrs_script.source %></code></pre>
+                            <p>Then in <code>Cargo.toml</code>:</p>
+                            <pre class="code-block"><code class="language-<%= code.docsrs_cargo.lang %>"><%= code.docsrs_cargo.source %></code></pre>
+                            <p class="integration-links">
+                                <a href="https://docs.rs/arborium-docsrs-demo/">See it in action</a>
+                            </p>
+                        </div>
+                        <div class="integration-item">
+                            <h4><%- icons["mdi:heart"] %> docs.rs team</h4>
+                            <p>
+                                If you maintain docs.rs or rustdoc, you could integrate arborium
+                                directly! Either <a href="https://github.com/rust-lang/rust/pull/149944">merge this PR</a>
+                                for native rustdoc support, or use <code>arborium-rustdoc</code> as a
+                                post-processing step:
+                            </p>
+                            <pre class="code-block"><code class="language-<%= code.rustdoc_postprocess.lang %>"><%= code.rustdoc_postprocess.source %></code></pre>
+                            <p>
+                                It streams through HTML, finds <code>&lt;pre class="language-*"&gt;</code>
+                                blocks, and highlights them in-place. Works with rustdoc's theme system.
+                            </p>
+                            <p class="integration-links">
+                                <a href="https://crates.io/crates/arborium-rustdoc">crates.io</a> ·
+                                <a href="https://docs.rs/arborium-rustdoc">docs.rs</a> ·
+                                <a href="rustdoc-comparison.html">See it in action!</a>
+                            </p>
+                        </div>
+                        <div class="integration-item">
+                            <h4><%- icons["mdi:cat"] %> miette-arborium</h4>
+                            <p>
+                                Syntax highlighting for
+                                <a href="https://crates.io/crates/miette">miette</a> error
+                                diagnostics. Beautiful, accurate highlighting in your CLI error
+                                messages.
+                            </p>
+                            <pre class="code-block"><code class="language-<%= code.miette_example.lang %>"><%= code.miette_example.source %></code></pre>
+                            <p class="integration-links">
+                                <a href="https://crates.io/crates/miette-arborium">crates.io</a> ·
+                                <a href="https://docs.rs/miette-arborium">docs.rs</a>
+                            </p>
+                        </div>
+                        <div class="integration-item">
+                            <h4><img src="dodeca-logo.svg" alt="dodeca" style="width: 1.2em; height: 1.2em; vertical-align: middle;"> dodeca</h4>
+                            <p>
+                                An incremental static site generator with zero-reload live updates via
+                                WASM DOM patching, Sass/SCSS, image processing, font subsetting, and
+                                arborium-powered syntax highlighting.
+                            </p>
+                            <p>
+                                <strong>Nothing to configure—it just works.</strong> Arborium is built in
+                                and automatically highlights all code blocks.
+                            </p>
+                            <p class="integration-links">
+                                <a href="https://dodeca.bearcove.eu/">Website</a> ·
+                                <a href="https://github.com/bearcove/dodeca">GitHub</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="about-card" id="languages">
+                    <h3>Languages</h3>
+                    <p>
+                        <strong id="lang-count"><%- language_count %></strong> languages included, each behind a
+                        feature flag. Enable only what you need, or use
+                        <code>all-languages</code> for everything.
+                    </p>
+                    <div class="lang-marquee-container">
+                        <div class="lang-marquee" id="lang-marquee"></div>
+                    </div>
+                    <p>
+                        Each feature flag comment includes the grammar's license, so you always know
+                        what you're shipping.
+                    </p>
+                </div>
+
+                <div class="about-card" id="themes">
+                    <h3>Theme support</h3>
+                    <p>
+                        The highlighter supports themes for both <strong>HTML</strong> and
+                        <strong>ANSI</strong> output.
+                    </p>
+                    <p class="theme-list-label">Bundled themes:</p>
+                    <div class="theme-swatches"><%- theme_swatches %></div>
+                    <p>
+                        Custom themes can be defined programmatically using RGB colors and style
+                        attributes (bold, italic, underline, strikethrough).
+                    </p>
+                </div>
+
+                <div class="about-card" id="html-tags">
+                    <h3>HTML Tag Reference</h3>
+                    <p>
+                        Arborium uses custom HTML elements to mark up syntax. Each tag corresponds to a semantic code element.
+                        To create custom themes, target these elements in your CSS.
+                    </p>
+
+                    <h4>Core Tags</h4>
+                    <div class="tag-grid">
+                        <div class="tag-item"><code>&lt;a-k&gt;</code> — Keyword</div>
+                        <div class="tag-item"><code>&lt;a-f&gt;</code> — Function</div>
+                        <div class="tag-item"><code>&lt;a-s&gt;</code> — String</div>
+                        <div class="tag-item"><code>&lt;a-c&gt;</code> — Comment</div>
+                        <div class="tag-item"><code>&lt;a-t&gt;</code> — Type</div>
+                        <div class="tag-item"><code>&lt;a-v&gt;</code> — Variable</div>
+                        <div class="tag-item"><code>&lt;a-co&gt;</code> — Constant</div>
+                        <div class="tag-item"><code>&lt;a-n&gt;</code> — Number</div>
+                        <div class="tag-item"><code>&lt;a-o&gt;</code> — Operator</div>
+                        <div class="tag-item"><code>&lt;a-p&gt;</code> — Punctuation</div>
+                        <div class="tag-item"><code>&lt;a-pr&gt;</code> — Property</div>
+                        <div class="tag-item"><code>&lt;a-at&gt;</code> — Attribute</div>
+                        <div class="tag-item"><code>&lt;a-tg&gt;</code> — Tag (HTML/XML)</div>
+                        <div class="tag-item"><code>&lt;a-m&gt;</code> — Macro</div>
+                        <div class="tag-item"><code>&lt;a-l&gt;</code> — Label</div>
+                        <div class="tag-item"><code>&lt;a-ns&gt;</code> — Namespace</div>
+                        <div class="tag-item"><code>&lt;a-cr&gt;</code> — Constructor</div>
+                    </div>
+
+                    <h4>Markup Tags</h4>
+                    <div class="tag-grid">
+                        <div class="tag-item"><code>&lt;a-tt&gt;</code> — Title/Heading</div>
+                        <div class="tag-item"><code>&lt;a-st&gt;</code> — Strong/Bold</div>
+                        <div class="tag-item"><code>&lt;a-em&gt;</code> — Emphasis/Italic</div>
+                        <div class="tag-item"><code>&lt;a-tu&gt;</code> — Link/URL</div>
+                        <div class="tag-item"><code>&lt;a-tl&gt;</code> — Literal/Code</div>
+                        <div class="tag-item"><code>&lt;a-tx&gt;</code> — Strikethrough</div>
+                    </div>
+
+                    <h4>Diff & Special</h4>
+                    <div class="tag-grid">
+                        <div class="tag-item"><code>&lt;a-da&gt;</code> — Diff Addition</div>
+                        <div class="tag-item"><code>&lt;a-dd&gt;</code> — Diff Deletion</div>
+                        <div class="tag-item"><code>&lt;a-eb&gt;</code> — Embedded</div>
+                        <div class="tag-item"><code>&lt;a-er&gt;</code> — Error</div>
+                    </div>
+
+                    <p>
+                        For the complete reference with examples and CSS styling tips, see the
+                        <a href="https://github.com/bearcove/arborium#html-tag-reference">HTML Tag Reference in the README</a>.
+                    </p>
+                </div>
+
+                <div class="about-card" id="size-comparison">
+                    <h3>Grammar Sizes</h3>
+                    <p>
+                        Each grammar includes the full tree-sitter runtime embedded in its WASM module.
+                        This adds a fixed overhead to every grammar bundle, on top of the grammar-specific parser tables.
+                    </p>
+
+                    <!-- Compression format selector -->
+                    <div class="size-format-selector">
+                        <button class="format-btn active" data-format="brotli">
+                            <span class="format-icon"><%- icons["mdi:package-variant-closed"] %></span>
+                            <span class="format-text">
+                                <span class="format-label">Brotli</span>
+                                <span class="format-desc">Best compression</span>
+                            </span>
+                        </button>
+                        <button class="format-btn" data-format="gzip">
+                            <span class="format-icon"><%- icons["mdi:zip-box"] %></span>
+                            <span class="format-text">
+                                <span class="format-label">GZip</span>
+                                <span class="format-desc">Widely supported</span>
+                            </span>
+                        </button>
+                        <button class="format-btn" data-format="uncompressed">
+                            <span class="format-icon"><%- icons["mdi:file-outline"] %></span>
+                            <span class="format-text">
+                                <span class="format-label">Uncompressed</span>
+                                <span class="format-desc">Raw WASM</span>
+                            </span>
+                        </button>
+                    </div>
+
+                    <!-- Size statistics summary -->
+                    <div class="size-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Smallest</span>
+                            <span class="stat-value" id="size-min">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Average</span>
+                            <span class="stat-value" id="size-avg">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Largest</span>
+                            <span class="stat-value" id="size-max">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Total</span>
+                            <span class="stat-value" id="size-total">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Search/filter and sort controls -->
+                    <div class="size-table-controls">
+                        <input
+                            type="text"
+                            id="size-table-search"
+                            placeholder="Filter by language name..."
+                            class="size-search-input"
+                        />
+                        <div class="sort-controls">
+                            <label>Sort:</label>
+                            <button class="sort-btn" data-sort="name">Name</button>
+                            <button class="sort-btn active" data-sort="size">Size</button>
+                        </div>
+                    </div>
+
+                    <!-- The table -->
+                    <div class="size-table-container">
+                        <table class="size-table" id="size-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-language">Language</th>
+                                    <th class="col-c-lines">C Lines</th>
+                                    <th class="col-size">Size</th>
+                                    <th class="col-bar">Distribution</th>
+                                </tr>
+                            </thead>
+                            <tbody id="size-table-body">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="about-card" id="wasm-build">
+                    <h3>WASM Build Pipeline</h3>
+                    <p>
+                        Every grammar is compiled to WASM with aggressive size optimizations. Here's the complete build pipeline:
+                    </p>
+
+                    <h4>1. cargo build</h4>
+                    <p>We compile with nightly Rust using <code>-Zbuild-std</code> to rebuild the standard library with our optimization flags:</p>
+                    <div class="build-flags">
+                        <div class="flag-item">
+                            <code>-Cpanic=immediate-abort</code>
+                            <span>Skip unwinding machinery</span>
+                        </div>
+                        <div class="flag-item">
+                            <code>-Copt-level=s</code>
+                            <span>Optimize for size, not speed</span>
+                        </div>
+                        <div class="flag-item">
+                            <code>-Clto=fat</code>
+                            <span>Full link-time optimization across all crates</span>
+                        </div>
+                        <div class="flag-item">
+                            <code>-Ccodegen-units=1</code>
+                            <span>Single codegen unit for maximum optimization</span>
+                        </div>
+                        <div class="flag-item">
+                            <code>-Cstrip=symbols</code>
+                            <span>Remove debug symbols</span>
+                        </div>
+                    </div>
+
+                    <h4>2. wasm-bindgen</h4>
+                    <p>Generate JavaScript bindings with <code>--target web</code> for ES module output.</p>
+
+                    <h4>3. wasm-opt</h4>
+                    <p>Final size optimization pass with Binaryen's optimizer:</p>
+                    <div class="build-flags">
+                        <div class="flag-item">
+                            <code>-Oz</code>
+                            <span>Aggressive size optimization</span>
+                        </div>
+                        <div class="flag-item">
+                            <code>--enable-bulk-memory</code>
+                            <span>Faster memory operations</span>
+                        </div>
+                        <div class="flag-item">
+                            <code>--enable-mutable-globals</code>
+                            <span>Required for wasm-bindgen</span>
+                        </div>
+                        <div class="flag-item">
+                            <code>--enable-simd</code>
+                            <span>SIMD instructions where applicable</span>
+                        </div>
+                    </div>
+
+                    <p class="build-note">
+                        Despite all these optimizations, WASM bundles are still large because each one embeds the full tree-sitter runtime.
+                        We're exploring ways to share the runtime across grammars, but that's the architecture trade-off for now.
+                    </p>
+                </div>
+
+                <div class="about-card faq" id="faq">
+                    <h3>FAQ</h3>
+                    <div class="faq-item">
+                        <h4>
+                            <span class="faq-icon"><%- icons["mdi:regex"] %></span>Why not
+                            highlight.js or Shiki?
+                        </h4>
+                        <div class="faq-answer">
+                            <p>
+                                Those use regex-based tokenization (TextMate grammars). Regexes
+                                can't count brackets, track scope, or understand structure—they just
+                                pattern-match.
+                            </p>
+                            <p>
+                                Tree-sitter actually <em>parses</em> your code into a syntax tree,
+                                so it knows that <code>fn</code> is a keyword only in the right
+                                context, handles deeply nested structures correctly, and recovers
+                                gracefully from syntax errors.
+                            </p>
+                            <p>
+                                IDEs with LSP support (like rust-analyzer) can do even better with
+                                <em>semantic</em> highlighting—they understand types and
+                                dependencies across files—but tree-sitter gets you 90% of the way
+                                there without needing a full language server.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <h4>
+                            <span class="faq-icon"><%- icons["mdi:forest"] %></span>Why the name
+                            "arborium"?
+                        </h4>
+                        <div class="faq-answer">
+                            <p>
+                                <em>Arbor</em> is Latin for tree (as in tree-sitter), and
+                                <em>-ium</em> denotes a place or collection (like aquarium,
+                                arboretum).
+                            </p>
+                            <p>It's a place where tree-sitter grammars live.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <h4>
+                            <span class="faq-icon"><%- icons["mdi:plus-circle-outline"] %></span>I
+                            have a grammar that's not included. Can you add it?
+                        </h4>
+                        <div class="faq-answer">
+                            <p>
+                                Yes!
+                                <a href="https://github.com/bearcove/arborium/issues"
+                                    >Open an issue</a
+                                >
+                                on the repo with a link to the grammar.
+                            </p>
+                            <p>
+                                We'll review it and add it if the grammar and highlight queries are
+                                in good shape.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <h4>
+                            <span class="faq-icon"><%- icons["simple-icons:webassembly"] %></span
+                            >Why not use the WASM builds from tree-sitter CLI?
+                        </h4>
+                        <div class="faq-answer">
+                            <p>
+                                When doing full-stack Rust, it's nice to have <em>exactly</em> the
+                                same code on the frontend and the backend.
+                            </p>
+                            <p>
+                                Rust crates compile to both native and WASM, so you get one
+                                dependency that works everywhere.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <h4>
+                            <span class="faq-icon"><%- icons["mdi:weight"] %></span>Why are
+                            tree-sitter parsers so large?
+                        </h4>
+                        <div class="faq-answer">
+                            <p>
+                                Tree-sitter uses table-driven LR parsing. The grammar compiles down
+                                to massive state transition tables—every possible parser state and
+                                every possible token gets an entry.
+                            </p>
+                            <p>
+                                These tables are optimized for O(1) lookup speed, not size. A
+                                complex grammar like TypeScript can have tens of thousands of
+                                states.
+                            </p>
+                            <p>
+                                The tradeoff is worth it: you get real parsing (not regex hacks)
+                                that handles edge cases correctly and recovers gracefully from
+                                syntax errors.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <footer>
+                <span class="footer-credit"
+                    ><a href="https://github.com/bearcove/arborium">arborium</a> by
+                    <a href="https://fasterthanli.me/">fasterthanlime</a></span
+                >
+                <span class="footer-sep">·</span>
+                <span class="footer-credit"
+                    ><a href="https://tree-sitter.github.io/">tree-sitter</a> by
+                    <a href="https://github.com/maxbrunsfeld">Max Brunsfeld</a></span
+                >
+                <span class="footer-sep">·</span>
+                <span class="footer-font"
+                    >code font <a href="https://typeof.net/Iosevka/">Iosevka</a></span
+                >
+            </footer>
+        </div>
+
+        <script src="pkg/arborium.iife.js?pluginsUrl=/plugins.json&hostUrl=/pkg" data-theme="<%= default_theme %>"></script>
+        <script type="module" src="pkg/app.generated.js"></script>
+        <script>
+            // Section navigation - highlight active section on scroll
+            (function () {
+                const nav = document.getElementById("section-nav");
+                const links = nav.querySelectorAll(".nav-link");
+                const sections = [];
+
+                links.forEach((link) => {
+                    const id = link.getAttribute("href").slice(1);
+                    const section = document.getElementById(id);
+                    if (section) sections.push({ id, el: section, link });
+                });
+
+                function updateActiveLink() {
+                    const scrollPos = window.scrollY + 100;
+
+                    let activeSection = sections[0];
+                    for (const section of sections) {
+                        if (section.el.offsetTop <= scrollPos) {
+                            activeSection = section;
+                        }
+                    }
+
+                    links.forEach((link) => link.classList.remove("active"));
+                    if (activeSection) {
+                        activeSection.link.classList.add("active");
+                    }
+                }
+
+                window.addEventListener("scroll", updateActiveLink, { passive: true });
+                updateActiveLink();
+
+                // Smooth scroll for nav links
+                links.forEach((link) => {
+                    link.addEventListener("click", (e) => {
+                        e.preventDefault();
+                        const id = link.getAttribute("href").slice(1);
+                        const target = document.getElementById(id);
+                        if (target) {
+                            const offset = nav.offsetHeight + 20;
+                            window.scrollTo({
+                                top: target.offsetTop - offset,
+                                behavior: "smooth",
+                            });
+                        }
+                    });
+                });
+            })();
+        </script>
+        <script>
+            // Add copy buttons to code blocks with scroll-safe wrapper
+            (function () {
+                document.querySelectorAll(".code-block").forEach((block) => {
+                    // Wrap content in scrollable container
+                    const wrapper = document.createElement("div");
+                    wrapper.className = "code-block-scroll";
+                    while (block.firstChild) {
+                        wrapper.appendChild(block.firstChild);
+                    }
+                    block.appendChild(wrapper);
+
+                    // Add copy button outside the scroll wrapper
+                    const btn = document.createElement("button");
+                    btn.className = "copy-btn";
+                    btn.textContent = "Copy";
+                    btn.addEventListener("click", async () => {
+                        const code = wrapper.querySelector("code");
+                        if (!code) return;
+                        try {
+                            await navigator.clipboard.writeText(code.textContent);
+                            btn.textContent = "Copied!";
+                            btn.classList.add("copied");
+                            setTimeout(() => {
+                                btn.textContent = "Copy";
+                                btn.classList.remove("copied");
+                            }, 2000);
+                        } catch (err) {
+                            btn.textContent = "Failed";
+                            setTimeout(() => {
+                                btn.textContent = "Copy";
+                            }, 2000);
+                        }
+                    });
+                    block.appendChild(btn);
+                });
+            })();
+        </script>
+    </body>
+</html>
