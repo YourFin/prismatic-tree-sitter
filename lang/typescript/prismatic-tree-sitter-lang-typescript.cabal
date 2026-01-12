@@ -39,9 +39,6 @@ library
       ./cbits
       ./vendor/arborium/langs/group-acorn/typescript/def/grammar/src
       ./vendor/arborium/langs/group-acorn/typescript/def/grammar
-  c-sources:
-      ./vendor/arborium/langs/group-acorn/typescript/def/grammar/src/parser.c
-      ./vendor/arborium/langs/group-acorn/typescript/def/grammar/scanner.c
   build-depends:
       base >=4.20 && <5
     , prismatic-tree-sitter-core

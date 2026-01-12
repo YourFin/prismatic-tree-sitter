@@ -5,4 +5,10 @@ module TreeSitter.Prismatic.Language.Typescript.Raw (typescript) where
 import Foreign.C.ConstPtr (ConstPtr (..))
 import TreeSitter.Prismatic.Internal.Language.TH (rawLanguageSplice)
 
-rawLanguageSplice "typescript" "tree-sitter-typescript.h" "tree_sitter_typescript"
+rawLanguageSplice
+    [ "vendor/arborium/langs/group-acorn/typescript/def/grammar/scanner.c"
+    , "vendor/arborium/langs/group-acorn/typescript/def/grammar/src/parser.c"
+    ]
+    "typescript"
+    "tree-sitter-typescript.h"
+    "tree_sitter_typescript"

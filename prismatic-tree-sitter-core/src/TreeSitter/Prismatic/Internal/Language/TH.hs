@@ -37,14 +37,13 @@ import Language.Haskell.TH (
     varP,
  )
 
-import Data.Proxy (Proxy (..))
+import Control.Monad (forM_)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Type.Equality (type (==))
-import Data.Typeable (tyConName, typeRep)
-import Data.Word (Word16)
 import Language.Haskell.TH (integerL, listE)
 import Language.Haskell.TH.Lib (varT)
+import Language.Haskell.TH.Syntax (ForeignSrcLang (LangC), Quasi (qAddForeignFilePath))
 import Language.Haskell.TH.Syntax qualified as TH
 import TreeSitter.Prismatic.Internal.Binding (C'TSLanguage)
 import TreeSitter.Prismatic.Internal.Language.Core
@@ -52,9 +51,10 @@ import TreeSitter.Prismatic.Internal.Language.Raw (RawLang)
 import TreeSitter.Prismatic.Internal.Language.Raw qualified as Raw
 import Type.Reflection (Typeable, someTypeRep, someTypeRepTyCon)
 
-rawLanguageSplice :: String -> String -> String -> Q [Dec]
-rawLanguageSplice lang header cFunction = do
+rawLanguageSplice :: [String] -> String -> String -> String -> Q [Dec]
+rawLanguageSplice cFiles lang header cFunction = do
     assertValueImported 'ConstPtr
+    forM_ cFiles (qAddForeignFilePath LangC)
     cImportName <- newName cFunction
     let langName = mkName lang
     sequenceA
