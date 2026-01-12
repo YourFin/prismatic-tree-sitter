@@ -1,0 +1,4 @@
+import Data.Proxy
+import TreeSitter.Prismatic.Internal.Language.Core
+import TreeSitter.Prismatic.Internal.Language.Raw
+import TreeSitter.Prismatic.Language.Typescript

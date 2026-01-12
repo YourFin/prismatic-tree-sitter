@@ -15,6 +15,7 @@
   - OverloadedRecordDot
   - DuplicateRecordFields
   - RecordWildCards
+  - ScopedTypeVariables
   - QuasiQuotes
   - BlockArguments
   

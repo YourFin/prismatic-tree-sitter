@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.38.2.
+-- This file has been generated from package.yaml by hpack version 0.38.3.
 --
 -- see: https://github.com/sol/hpack
 
@@ -20,8 +20,12 @@ library
       Data.Prismatic.TreeSitter
       Data.Prismatic.TreeSitter.Node
       TreeSitter.Prismatic.Internal.Binding
-      TreeSitter.Prismatic.Internal.Language
+      TreeSitter.Prismatic.Internal.Language.Core
+      TreeSitter.Prismatic.Internal.Language.LanguageAccessError
+      TreeSitter.Prismatic.Internal.Language.Raw
+      TreeSitter.Prismatic.Internal.Language.SymbolType
       TreeSitter.Prismatic.Internal.Language.TH
+      TreeSitter.Prismatic.Internal.Query
   other-modules:
       Paths_prismatic_tree_sitter_core
   hs-source-dirs:
@@ -33,6 +37,7 @@ library
       OverloadedRecordDot
       DuplicateRecordFields
       RecordWildCards
+      ScopedTypeVariables
       QuasiQuotes
       BlockArguments
   ghc-options: -Wall -Wredundant-constraints
@@ -47,8 +52,10 @@ library
       vendor/lib/src/lib.c
       cbits/tree_sitter_ffi_bridge.c
   build-depends:
-      base >=4.20 && <5
+      array
+    , base >=4.20 && <5
     , bytestring
+    , mtl
     , template-haskell >=2.20 && <3
     , text
   default-language: GHC2024

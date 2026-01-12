@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.38.2.
+-- This file has been generated from package.yaml by hpack version 0.38.3.
 --
 -- see: https://github.com/sol/hpack
 
@@ -18,7 +18,7 @@ flag dev
 library
   exposed-modules:
       TreeSitter.Prismatic.Language.Typescript
-      TreeSitter.Prismatic.Language.Typescript.Core
+      TreeSitter.Prismatic.Language.Typescript.Raw
   other-modules:
       Paths_prismatic_tree_sitter_lang_typescript
   hs-source-dirs:
@@ -30,17 +30,18 @@ library
       OverloadedRecordDot
       DuplicateRecordFields
       RecordWildCards
+      ScopedTypeVariables
       QuasiQuotes
       BlockArguments
   ghc-options: -Wall -Wredundant-constraints
   cc-options: -std=c99 -D_GNU_SOURCE -Wno-gnu-folding-constant
   include-dirs:
       ./cbits
-      ../vendor/arborium/langs/group-acorn/typescript/def/grammar/src
-      ../vendor/arborium/langs/group-acorn/typescript/def/grammar
+      ./vendor/arborium/langs/group-acorn/typescript/def/grammar/src
+      ./vendor/arborium/langs/group-acorn/typescript/def/grammar
   c-sources:
-      ../vendor/arborium/langs/group-acorn/typescript/def/grammar/src/parser.c
-      ../vendor/arborium/langs/group-acorn/typescript/def/grammar/scanner.c
+      ./vendor/arborium/langs/group-acorn/typescript/def/grammar/src/parser.c
+      ./vendor/arborium/langs/group-acorn/typescript/def/grammar/scanner.c
   build-depends:
       base >=4.20 && <5
     , prismatic-tree-sitter-core

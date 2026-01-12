@@ -33,10 +33,22 @@
             # (defined by `defaults.packages` option).
             #
             packages = {
+              cabal-hoogle = {
+                source = pkgs.fetchFromGitHub {
+                  owner = "YourFin";
+                  repo = "cabal-hoogle";
+                  rev = "fc857f3e42ba3f8e2f456ec4e453ca63d0d8f43a";
+                  hash = "sha256-D9Pi88sSWs4EfZT1QtnjcjvD13D2xH4ZPDS6Dl/EmrI=";
+                };
+              };
               # aeson.source = "1.5.0.0";      # Override aeson to a custom version from Hackage
               # shower.source = inputs.shower; # Override shower to a custom source path
             };
             settings = {
+              cabal-hoogle = {
+                check = false;
+                broken = false;
+              };
               #  aeson = {
               #    check = false;
               #  };
@@ -47,8 +59,7 @@
             };
 
             devShell = {
-              # Enabled by default
-              # enable = true;
+              enable = true;
 
               mkShellArgs = {
                 nativeBuildInputs = with pkgs; [
@@ -58,6 +69,10 @@
                   curl
                   tree-sitter
                 ];
+                shellHook = ''
+                  export CABAL_DIR=$(pwd)/.cabal
+                  export CABAL_CONFIG=$(pwd)/.cabal/config
+                '';
               };
               # Programs you want to make available in the shell.
               # Default programs can be disabled by setting to 'null'
@@ -66,6 +81,7 @@
                 hp: with pkgs; {
                   fourmolu = hp.fourmolu;
                   hpack = hp.hpack;
+                  cabal-hoogle = hp.cabal-hoogle;
                 };
 
               # Check that haskell-language-server works
