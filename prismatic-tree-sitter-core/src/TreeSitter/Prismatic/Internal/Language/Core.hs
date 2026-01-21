@@ -26,7 +26,7 @@ class LangCore l where
     langCoreFields :: Proxy l -> Array Word16 Text
     langCoreName :: Proxy l -> Text
 
-    --    langCoreVersion :: Proxy l -> LangVersion
+    -- langCoreVersion :: Proxy l -> LangVersion
     langCoreRaw :: Proxy l -> IO RawLang
 
 data LangVersion = LangVersion
