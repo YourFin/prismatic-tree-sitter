@@ -144,6 +144,7 @@ module TreeSitter.Prismatic.Internal.Binding where
 #field type , <TSQueryPredicateStepType>
 #field value_id , Word32
 #stoptype
+deriving instance Ord C'TSQueryPredicateStep
 
 -- ** TSQueryError
 #integral_t TSQueryError
@@ -596,7 +597,7 @@ module TreeSitter.Prismatic.Internal.Binding where
 #capi ts_query_end_byte_for_pattern , ConstPtr <TSQuery> -> Word32 -> Word32
 
 -- | Get all of the predicates for the given pattern in the query.
-#capi ts_query_predicates_for_pattern , ConstPtr <TSQuery> -> Word32 -> Ptr Word32 -> ConstPtr <TSQueryPredicateStep>
+#capi ts_query_predicates_for_pattern , ConstPtr <TSQuery> -> Word32 -> Ptr Word32 -> IO (ConstPtr <TSQueryPredicateStep>)
 
 -- | Check if the given pattern in the query has a single root node.
 #capi ts_query_is_pattern_rooted , ConstPtr <TSQuery> -> Word32 -> CBool
@@ -608,13 +609,13 @@ module TreeSitter.Prismatic.Internal.Binding where
 #capi ts_query_is_pattern_guaranteed_at_step , ConstPtr <TSQuery> -> Word32 -> CBool
 
 -- | Get the name and length of one of the query's captures.
-#capi ts_query_capture_name_for_id , ConstPtr <TSQuery> -> Word32 -> Ptr Word32 -> ConstPtr CChar
+#capi ts_query_capture_name_for_id , ConstPtr <TSQuery> -> Word32 -> Ptr Word32 -> IO (ConstPtr CChar)
 
 -- | Get the quantifier of the query's captures.
 #capi ts_query_capture_quantifier_for_id , ConstPtr <TSQuery> -> Word32 -> Word32 -> <TSQuantifier>
 
 -- | Get the string value for the given id.
-#capi ts_query_string_value_for_id , ConstPtr <TSQuery> -> Word32 -> Ptr Word32 -> ConstPtr CChar
+#capi ts_query_string_value_for_id , ConstPtr <TSQuery> -> Word32 -> Ptr Word32 -> IO (ConstPtr CChar)
 
 -- | Disable a certain capture within a query.
 #capi ts_query_disable_capture , Ptr <TSQuery> -> ConstPtr CChar -> Word32 -> IO ()
@@ -651,12 +652,6 @@ module TreeSitter.Prismatic.Internal.Binding where
 
 -- | Set the match limit for the query cursor.
 #capi ts_query_cursor_set_match_limit , Ptr <TSQueryCursor> -> Word32 -> IO ()
-
--- | Set the maximum duration in microseconds that query execution should be allowed to take.
-#capi ts_query_cursor_set_timeout_micros , Ptr <TSQueryCursor> -> Word64 -> IO ()
-
--- | Get the duration in microseconds that query execution is allowed to take.
-#capi ts_query_cursor_timeout_micros , ConstPtr <TSQueryCursor> -> Word64
 
 -- | Set the range of bytes in which the query will be executed.
 #capi ts_query_cursor_set_byte_range , Ptr <TSQueryCursor> -> Word32 -> Word32 -> IO CBool

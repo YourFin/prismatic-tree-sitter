@@ -367,7 +367,7 @@ static struct {
     bc_fielddata.n = 0;                                                        \
     char typename[] = #name;                                                   \
     int index;                                                                 \
-    int standalone_deriving = 0;
+    int standalone_deriving = 1;
 
 #define bc_basicfield(name, type, u, f)                                        \
   index = bc_fielddata.n++;                                                    \

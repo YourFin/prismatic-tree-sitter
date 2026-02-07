@@ -20,12 +20,13 @@ library
       Data.Prismatic.TreeSitter
       Data.Prismatic.TreeSitter.Node
       TreeSitter.Prismatic.Internal.Binding
+      TreeSitter.Prismatic.Internal.Foreign.Array
       TreeSitter.Prismatic.Internal.Language.Core
       TreeSitter.Prismatic.Internal.Language.LanguageAccessError
       TreeSitter.Prismatic.Internal.Language.Raw
       TreeSitter.Prismatic.Internal.Language.SymbolType
       TreeSitter.Prismatic.Internal.Language.TH
-      TreeSitter.Prismatic.Internal.Query
+      TreeSitter.Prismatic.Internal.Query.Raw
   other-modules:
       Paths_prismatic_tree_sitter_core
   hs-source-dirs:
@@ -59,6 +60,46 @@ library
     , mtl
     , template-haskell >=2.20 && <3
     , text
+  default-language: GHC2024
+  if flag(dev)
+    ghc-options: -O0
+  else
+    ghc-options: -O2
+
+test-suite core-tests
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      TreeSitter.Prismatic.Internal.Query.RawSpec
+      TreeSitter.Prismatic.Language.Json
+      TreeSitter.Prismatic.Language.Json.Raw
+      Paths_prismatic_tree_sitter_core
+  hs-source-dirs:
+      test
+  default-extensions:
+      TemplateHaskell
+      TypeFamilies
+      OverloadedLabels
+      OverloadedRecordDot
+      DuplicateRecordFields
+      RecordWildCards
+      ScopedTypeVariables
+      QuasiQuotes
+      BlockArguments
+  ghc-options: -Wall -Wredundant-constraints
+  cc-options: -std=c99 -D_GNU_SOURCE -Wno-gnu-folding-constant
+  include-dirs:
+      tst-cbits
+      ./tst-vendor/json-grammar/grammar
+      ./tst-vendor/json-grammar/grammar/src
+  build-tool-depends:
+      hspec-discover:hspec-discover
+  build-depends:
+      base >=4.20 && <5
+    , hspec
+    , hspec-contrib
+    , hspec-discover
+    , prismatic-tree-sitter-core
   default-language: GHC2024
   if flag(dev)
     ghc-options: -O0

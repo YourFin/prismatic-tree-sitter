@@ -26,3 +26,28 @@ library:
     # https://github.com/amartani/covers/commit/00d61bd5aa8eaa7528652b3ea609d0af9fcf03ed
     - -D_GNU_SOURCE
     - -Wno-gnu-folding-constant
+
+tests:
+  core-tests:
+    main: Spec.hs
+    build-tools:
+     - hspec-discover:hspec-discover
+    dependencies:
+     - hspec
+     - hspec-contrib
+     - hspec-discover
+     - prismatic-tree-sitter-core
+    source-dirs: test
+    include-dirs:
+     - tst-cbits
+     - ./tst-vendor/json-grammar/grammar
+     - ./tst-vendor/json-grammar/grammar/src
+    ghc-options:
+     # Some of the tested functions are partial, no point
+     # in complaining about it
+     - -Wx-no-partial
+    cc-options:
+      - -std=c99
+      # https://github.com/amartani/covers/commit/00d61bd5aa8eaa7528652b3ea609d0af9fcf03ed
+      - -D_GNU_SOURCE
+      - -Wno-gnu-folding-constant

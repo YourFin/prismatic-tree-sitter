@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module TreeSitter.Prismatic.Internal.Query where
+module TreeSitter.Prismatic.Internal.Query.Raw where
 
 import Prelude hiding (lines, tail)
 
@@ -16,14 +16,25 @@ import Data.Word (Word32)
 import Foreign.C.ConstPtr (ConstPtr (..))
 import Foreign.ForeignPtr (ForeignPtr, newForeignPtr, withForeignPtr)
 
+import Control.Monad (when)
 import Control.Monad.Cont (cont, evalCont)
 import Errata
 import Errata.Styles qualified as Errata
 import Foreign (alloca, nullPtr, peek)
 import Foreign.C (CUInt (CUInt))
+import Foreign.Marshal.Utils (toBool)
+import GHC.Generics (Generic)
 import System.IO.Unsafe (unsafePerformIO)
 import TreeSitter.Prismatic.Internal.Binding
+import TreeSitter.Prismatic.Internal.Foreign.Array (peekConstArray)
 import TreeSitter.Prismatic.Internal.Language.Raw (RawLang (..))
+
+-- NOTE:
+-- use overloaded labels to get query names
+-- Encoding in type of query should be
+-- Query '["singleton", Many "multiple captures", "another"]
+-- Where index in type level list represents the actual index
+-- into the query
 
 data RawQuery = RawQuery
   { unQuery :: !(ForeignPtr C'TSQuery)
@@ -31,7 +42,7 @@ data RawQuery = RawQuery
     -- So the garbage collector doesn't kill it
     lang :: !RawLang
   }
-  deriving (Eq)
+  deriving (Eq, Ord, Generic)
 
 data QueryError = QueryError
   { query :: !Text
@@ -41,7 +52,7 @@ data QueryError = QueryError
   , kind :: !C'TSQueryError
   -- ^ Kind of error in the query
   }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic)
 
 cTsQueryErrorName :: C'TSQueryError -> Text
 cTsQueryErrorName err
@@ -59,7 +70,7 @@ cTsQueryErrorName err
 instance Show QueryError where
   -- This implementation is O(Query size)
   show (QueryError{..}) =
-    errataSimple (Just "Tree-sitter unable to parse query") block Nothing
+    errataSimple (Just "QueryError: Tree-sitter unable to parse query") block Nothing
       & (Errata.prettyErrors query . pure)
       & Lazy.unpack
    where
@@ -82,11 +93,14 @@ instance Show QueryError where
     showT = Text.pack . show
     -- bit of a hack job - doesn't account for errors in
     -- newline characters (annoying) or windows-style line endings
-    -- (Erratta's fault)
+    -- (Erratta's fault - uses Text's `lines` impl)
     --
     -- NOTE: The Errata package does not appear to account for
     -- newlines or unicode grapheme clustering/bidi when calculating
     -- offsets
+    --
+    -- It also doesn't /do/ all that much here, and may be worth replacing
+    -- should something suitable come up
     (line, col) = byteLocation query (fromEnum errorOffset)
     byteLocation text byteOffset =
       let
@@ -149,6 +163,83 @@ captureCount = flip withQueryPtrReferentiallyTransparent $ c'ts_query_capture_co
 
 stringLiteralCount :: RawQuery -> Word32
 stringLiteralCount = flip withQueryPtrReferentiallyTransparent $ c'ts_query_string_count
+
+-- | Check if the given pattern in the query has a single root node.
+isPatternRooted :: RawQuery -> Word32 -> Bool
+isPatternRooted query patternIdx = withQueryPtrReferentiallyTransparent query $ \queryPtr ->
+  c'ts_query_is_pattern_rooted queryPtr patternIdx
+    & toBool
+{-# WARNING in "x-partial" isPatternRooted "pattern index argument can go out of bounds and read arbitrary memory" #-}
+
+{-| Check if the given pattern in the query is 'non local'.
+
+  A non-local pattern has multiple root nodes and can match within a
+  repeating sequence of nodes, as specified by the grammar. Non-local
+  patterns disable certain optimizations that would otherwise be possible
+  when executing a query on a specific range of a syntax tree.
+-}
+isPatternNonLocal :: RawQuery -> Word32 -> Bool
+isPatternNonLocal query patternIdx = withQueryPtrReferentiallyTransparent query $ \queryPtr ->
+  c'ts_query_is_pattern_non_local queryPtr patternIdx
+    & toBool
+{-# WARNING in "x-partial" isPatternNonLocal "pattern index argument can go out of bounds and read arbitrary memory" #-}
+
+-- TODO: ts_query_is_pattern_guaranteed_at_step
+
+{-| Get all of the predicates for the given pattern in the query.
+
+The predicates are represented as a single array of steps. There are three
+types of steps in this array, which correspond to the three legal values for
+the `type` field:
+- `TSQueryPredicateStepTypeCapture` - Steps with this type represent names
+   of captures. Their `value_id` can be used with the
+  [`ts_query_capture_name_for_id`] function to obtain the name of the capture.
+- `TSQueryPredicateStepTypeString` - Steps with this type represent literal
+   strings. Their `value_id` can be used with the
+   [`ts_query_string_value_for_id`] function to obtain their string value.
+- `TSQueryPredicateStepTypeDone` - Steps with this type are *sentinels*
+   that represent the end of an individual predicate. If a pattern has two
+   predicates, then there will be two steps with this `type` in the array.
+-}
+predicatesForPattern :: RawQuery -> Word32 -> [C'TSQueryPredicateStep]
+predicatesForPattern query patternIdx = unsafePerformIO $ withQueryPtrReferentiallyTransparent query $ \queryPtr ->
+  alloca $ \stepCountOut -> do
+    arrPtr <- c'ts_query_predicates_for_pattern queryPtr patternIdx stepCountOut
+    stepCount <- peek stepCountOut
+    when (toInteger stepCount > toInteger (maxBound :: Int)) $
+      fail
+        ( "Query predicate steps ("
+            <> show stepCount
+            <> ") greater than IntMax: "
+            <> show (maxBound :: Int)
+        )
+    peekConstArray (fromEnum stepCount) arrPtr
+{-# WARNING in "x-partial"
+  predicatesForPattern
+  "pattern index argument can go out of bounds and read arbitrary memory"
+  #-}
+
+{-| Get the name and length of one of the query's captures, or one of the
+  query's string literals. Each capture and string is associated with a
+  numeric id based on the order that it appeared in the query's source.
+
+  Port of ts_query_capture_name_for_id, which appears to have taken on the
+  string-literal fetching functionality later in life.
+-}
+captureNameOrTextOfPredicate :: RawQuery -> Word32 -> Text
+captureNameOrTextOfPredicate query predicateIdx = unsafePerformIO $ withQueryPtrReferentiallyTransparent query $ \queryPtr ->
+  alloca $ \strLenPtr -> do
+    (ConstPtr strPtr) <- c'ts_query_capture_name_for_id queryPtr predicateIdx strLenPtr
+    strLen <- peek strLenPtr
+    when (toInteger strLen > toInteger (maxBound :: Int)) $
+      fail
+        ( "Capture name or raw text has length ("
+            <> show strLen
+            <> "), greater than IntMax: "
+            <> show (maxBound :: Int)
+        )
+    bytes <- ByteString.packCStringLen (strPtr, fromEnum strLen)
+    pure $ Text.decodeUtf8Lenient bytes
 
 {-| UNSAFE - helper method for writing accessor methods against queries.
 must not have side effects.
