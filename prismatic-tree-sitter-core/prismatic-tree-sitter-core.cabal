@@ -27,6 +27,7 @@ library
       TreeSitter.Prismatic.Internal.Language.SymbolType
       TreeSitter.Prismatic.Internal.Language.TH
       TreeSitter.Prismatic.Internal.Query.Raw
+      TreeSitter.Prismatic.Internal.Tree
   other-modules:
       Paths_prismatic_tree_sitter_core
   hs-source-dirs:

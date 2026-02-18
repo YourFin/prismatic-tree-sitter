@@ -772,3 +772,5 @@ deriving instance Ord C'TSQueryPredicateStep
 
 #capi_stop_header "tree_sitter/api.h"
 
+-- | C free function
+foreign import capi "stdlib.h free" c_free :: Ptr a -> IO ()
