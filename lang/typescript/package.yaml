@@ -11,6 +11,9 @@ library:
     - ./cbits
     - ./vendor/arborium/langs/group-acorn/typescript/def/grammar/src
     - ./vendor/arborium/langs/group-acorn/typescript/def/grammar
+#  c-sources:
+#    - ./vendor/arborium/langs/group-acorn/typescript/def/grammar/src/parser.c
+#    - ./vendor/arborium/langs/group-acorn/typescript/def/grammar/scanner.c
   cc-options:
     - -std=c99
     # https://github.com/amartani/covers/commit/00d61bd5aa8eaa7528652b3ea609d0af9fcf03ed

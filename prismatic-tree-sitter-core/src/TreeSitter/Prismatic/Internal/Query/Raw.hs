@@ -16,13 +16,21 @@ import Data.Word (Word32)
 import Foreign.C.ConstPtr (ConstPtr (..))
 import Foreign.ForeignPtr (ForeignPtr, newForeignPtr, withForeignPtr)
 
-import Control.Monad (when)
+import Control.Exception.Base (SomeException)
+import Control.Monad (forM, when)
 import Control.Monad.Cont (cont, evalCont)
+import Control.Monad.Except (
+  ExceptT (..),
+  MonadError (throwError),
+  runExceptT,
+ )
+import Control.Monad.IO.Class (liftIO)
 import Errata
 import Errata.Styles qualified as Errata
-import Foreign (alloca, nullPtr, peek)
+import Foreign (Storable, alloca, nullPtr, peek)
 import Foreign.C (CUInt (CUInt))
 import Foreign.Marshal.Utils (toBool)
+import Foreign.Ptr (Ptr)
 import GHC.Generics (Generic)
 import System.IO.Unsafe (unsafePerformIO)
 import TreeSitter.Prismatic.Internal.Binding
@@ -44,15 +52,31 @@ data RawQuery = RawQuery
   }
   deriving (Eq, Ord, Generic)
 
-data QueryError = QueryError
-  { query :: !Text
-  -- ^ Text of the query
-  , errorOffset :: !Word32
-  -- ^ Offset into query where the error occurred
-  , kind :: !C'TSQueryError
-  -- ^ Kind of error in the query
-  }
-  deriving (Eq, Ord, Generic)
+data QueryError
+  = -- | Query compilation error reported by the C api
+    QueryCompilationError
+      { query :: !Text
+      -- ^ Text of the query
+      , errorOffset :: !Word32
+      -- ^ Offset into query where the error occurred
+      , kind :: !C'TSQueryError
+      -- ^ Kind of error in the query
+      }
+  | {-| When a e.g. a uint32 used for pointer indexing
+    returned from the api is bigger than e.g. INTMAX
+    on the compilation platform
+    -}
+    QueryErrorOutOfRange
+      { valueName :: !String
+      , outOfBoundsAmount :: !Integer
+      , typeOutOfBounds :: !String
+      , typeMax :: !Integer
+      }
+  | QueryErrorIOException {exception :: !SomeException}
+  deriving (Generic)
+
+-- | Internal monad stack for query compilation
+type QueryM a = ExceptT QueryError IO a
 
 cTsQueryErrorName :: C'TSQueryError -> Text
 cTsQueryErrorName err
@@ -69,7 +93,7 @@ cTsQueryErrorName err
 -- TODO: custom show impl
 instance Show QueryError where
   -- This implementation is O(Query size)
-  show (QueryError{..}) =
+  show (QueryCompilationError{..}) =
     errataSimple (Just "QueryError: Tree-sitter unable to parse query") block Nothing
       & (Errata.prettyErrors query . pure)
       & Lazy.unpack
@@ -134,6 +158,17 @@ instance Show QueryError where
                    in (length lines, lenLast lines)
 
     lenLast = foldl' (\_ t -> Text.length t) 0
+  show (QueryErrorOutOfRange{..}) =
+    "QueryError: resulting query has more "
+      <> valueName
+      <> " ("
+      <> show outOfBoundsAmount
+      <> ") than max "
+      <> typeOutOfBounds
+      <> " ("
+      <> show typeMax
+      <> ") on the current architure"
+  show (QueryErrorIOException{..}) = "QueryErrorIOException (" <> show exception <> ")"
 
 instance Exception QueryError
 
@@ -150,7 +185,7 @@ new lang query = unsafePerformIO $ evalCont do
       then do
         errorOffset <- peek errOffsetPtr
         kind <- peek errTypePtr
-        pure $ Left $ QueryError{..}
+        pure $ Left $ QueryCompilationError{..}
       else do
         unQuery <- newForeignPtr p'ts_query_delete queryPtr
         pure $ Right $ RawQuery{unQuery, lang}
@@ -210,7 +245,7 @@ predicatesForPattern query patternIdx = unsafePerformIO $ withQueryPtrReferentia
       fail
         ( "Query predicate steps ("
             <> show stepCount
-            <> ") greater than IntMax: "
+            <> ") greater than max : "
             <> show (maxBound :: Int)
         )
     peekConstArray (fromEnum stepCount) arrPtr
@@ -226,14 +261,25 @@ predicatesForPattern query patternIdx = unsafePerformIO $ withQueryPtrReferentia
   Port of ts_query_capture_name_for_id, which appears to have taken on the
   string-literal fetching functionality later in life.
 -}
-captureNameOrTextOfPredicate :: RawQuery -> Word32 -> Text
-captureNameOrTextOfPredicate query predicateIdx = unsafePerformIO $ withQueryPtrReferentiallyTransparent query $ \queryPtr ->
+captureNames :: (MonadError QueryError m) => RawQuery -> m [Text]
+captureNames query = unsafePerformIO_queryError $ withQueryPtrReferentiallyTransparent query $ \queryPtr -> do
+  let capCount = captureCount query
+  forM [0 .. capCount - 1] \capIdx ->
+    alloca' $ \strLenPtr -> do
+      (ConstPtr strPtr) <- liftIO $ c'ts_query_capture_name_for_id queryPtr capIdx strLenPtr
+      strLen' <- liftIO $ peek strLenPtr
+      strLen <- word32ToInt "capture name length" strLen'
+      bytes <- liftIO $ ByteString.packCStringLen (strPtr, fromEnum strLen)
+      pure $ Text.decodeUtf8Lenient bytes
+
+queryStringValueForId :: RawQuery -> Word32 -> Text
+queryStringValueForId query predicateIdx = unsafePerformIO $ withQueryPtrReferentiallyTransparent query $ \queryPtr ->
   alloca $ \strLenPtr -> do
     (ConstPtr strPtr) <- c'ts_query_capture_name_for_id queryPtr predicateIdx strLenPtr
     strLen <- peek strLenPtr
     when (toInteger strLen > toInteger (maxBound :: Int)) $
       fail
-        ( "Capture name or raw text has length ("
+        ( "Query capture has length ("
             <> show strLen
             <> "), greater than IntMax: "
             <> show (maxBound :: Int)
@@ -248,5 +294,36 @@ withQueryPtrReferentiallyTransparent :: RawQuery -> (ConstPtr C'TSQuery -> a) ->
 withQueryPtrReferentiallyTransparent query closure =
   unsafePerformIO $ withForeignConstPtr (unQuery query) $ \ptr -> pure $ closure ptr
 
+unsafePerformIO_queryError :: (MonadError QueryError m) => QueryM a -> m a
+unsafePerformIO_queryError ma = case unsafePerformIO $ runExceptT ma of
+  Right a -> pure a
+  Left e -> throwError e
+
 withForeignConstPtr :: ForeignPtr a -> (ConstPtr a -> IO b) -> IO b
 withForeignConstPtr fp closure = withForeignPtr fp $ \ptr -> closure (ConstPtr ptr)
+
+word32ToInt :: (MonadError QueryError m) => String -> Word32 -> m Int
+word32ToInt = safeCastIntegerlike "int"
+
+intToWord32 :: (MonadError QueryError m) => String -> Int -> m Word32
+intToWord32 = safeCastIntegerlike "uint32"
+
+safeCastIntegerlike ::
+  forall b a m.
+  (MonadError QueryError m, Bounded b, Integral a, Integral b) =>
+  String -> String -> a -> m b
+safeCastIntegerlike destTypeName valueName x
+  | toInteger x > toInteger (maxBound @b) =
+      throwError $
+        QueryErrorOutOfRange
+          { valueName
+          , outOfBoundsAmount = toInteger x
+          , typeOutOfBounds = destTypeName
+          , typeMax = toInteger $ maxBound @b
+          }
+  | otherwise = pure $ toEnum $ fromEnum x
+
+alloca' :: (Storable a) => (Ptr a -> QueryM b) -> QueryM b
+alloca' cb =
+  alloca (\ptr -> runExceptT $ cb ptr)
+    & ExceptT

@@ -33,10 +33,11 @@ tests:
     build-tools:
      - hspec-discover:hspec-discover
     dependencies:
+     - prismatic-tree-sitter-core
      - hspec
      - hspec-contrib
      - hspec-discover
-     - prismatic-tree-sitter-core
+     - text
     source-dirs: test
     include-dirs:
      - tst-cbits

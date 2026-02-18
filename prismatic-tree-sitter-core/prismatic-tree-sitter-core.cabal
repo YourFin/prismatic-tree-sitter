@@ -87,7 +87,7 @@ test-suite core-tests
       ScopedTypeVariables
       QuasiQuotes
       BlockArguments
-  ghc-options: -Wall -Wredundant-constraints
+  ghc-options: -Wall -Wredundant-constraints -Wx-no-partial
   cc-options: -std=c99 -D_GNU_SOURCE -Wno-gnu-folding-constant
   include-dirs:
       tst-cbits
@@ -101,6 +101,7 @@ test-suite core-tests
     , hspec-contrib
     , hspec-discover
     , prismatic-tree-sitter-core
+    , text
   default-language: GHC2024
   if flag(dev)
     ghc-options: -O0
