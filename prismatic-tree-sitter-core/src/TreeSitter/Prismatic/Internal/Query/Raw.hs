@@ -41,11 +41,12 @@ import Foreign.C (CUInt (CUInt))
 import Foreign.Marshal.Utils (toBool)
 import Foreign.Ptr (Ptr)
 import GHC.Generics (Generic)
-import GHC.TypeLits (KnownNat, Nat)
+import GHC.TypeLits (KnownNat, Nat, SNat, pattern SNat)
 import System.IO.Unsafe (unsafePerformIO)
 import TreeSitter.Prismatic.Internal.Binding
 import TreeSitter.Prismatic.Internal.Foreign.Array (peekConstArray)
 import TreeSitter.Prismatic.Internal.Language.Raw (RawLang (..))
+import Type.Reflection (Typeable)
 
 -- NOTE:
 -- use overloaded labels to get query names
@@ -54,8 +55,8 @@ import TreeSitter.Prismatic.Internal.Language.Raw (RawLang (..))
 -- Where index in type level list represents the actual index
 -- into the query
 
-data RawQuery patternCount captureCount
-  = RawQuery
+data RawQuery' patternCount captureCount
+  = RawQuery'
   { unQuery :: !(ForeignPtr C'TSQuery)
   , captureNames :: !(Vector captureCount Text)
   , predicates :: !(Vector patternCount [Predicate captureCount])
@@ -70,6 +71,17 @@ data RawQuery patternCount captureCount
     lang :: !RawLang
   }
   deriving (Eq, Ord, Generic)
+
+data RawQuery where
+  RawQuery ::
+    SNat patternCount ->
+    SNat captureCount ->
+    ( RawQuery'
+        patternCount
+        captureCount
+    ) ->
+    RawQuery
+  deriving (Typeable)
 
 -- type RawQuery =
 --   forall (patternCount :: Nat) (captureCount :: Nat).
@@ -218,14 +230,8 @@ parseCaptureQuantifier cval
   | cval == c'TSQuantifierOneOrMore = pure CaptureQuantifierOneOrMore
   | otherwise = unknownEnumVal "TSQuantifier" cval
 
-withNew ::
-  RawLang ->
-  Text ->
-  ( forall (p :: Nat) (c :: Nat).
-    (KnownNat p, KnownNat c) => Either QueryError (RawQuery p c) -> r
-  ) ->
-  r
-withNew lang query cb = cb $ unsafePerformIO $ (flip Control.Exception.catch) (pure . Left . QueryErrorIOException) $ evalCont do
+new :: RawLang -> Text -> Either QueryError RawQuery
+new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left . QueryErrorIOException) $ evalCont do
   langPtr <- cont $ withForeignConstPtr (unLang lang)
   (queryTextPtr, queryLen) <- cont $ Text.withCStringLen query
   errOffsetPtr <- cont $ alloca @Word32
@@ -334,7 +340,7 @@ withNew lang query cb = cb $ unsafePerformIO $ (flip Control.Exception.catch) (p
               <&> catMaybes
           -- end unsizedPreds
           pure $ Sized.withSized unsizedPreds $ \predicates ->
-            RawQuery{source = query, ..}
+            RawQuery SNat SNat RawQuery'{source = query, ..}
 
 -- TODO: audit unexpected messagses for consistency
 splitOn :: (a -> Bool) -> [a] -> [[a]]
