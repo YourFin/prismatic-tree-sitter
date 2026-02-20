@@ -26,6 +26,8 @@ library
       TreeSitter.Prismatic.Internal.Language.Raw
       TreeSitter.Prismatic.Internal.Language.SymbolType
       TreeSitter.Prismatic.Internal.Language.TH
+      TreeSitter.Prismatic.Internal.Query.CaptureQuantifier
+      TreeSitter.Prismatic.Internal.Query.Pattern
       TreeSitter.Prismatic.Internal.Query.Raw
       TreeSitter.Prismatic.Internal.Tree
   other-modules:
@@ -35,6 +37,7 @@ library
   default-extensions:
       TemplateHaskell
       TypeFamilies
+      PatternSynonyms
       OverloadedLabels
       OverloadedRecordDot
       DuplicateRecordFields
@@ -42,6 +45,7 @@ library
       ScopedTypeVariables
       QuasiQuotes
       BlockArguments
+      ViewPatterns
   ghc-options: -Wall -Wredundant-constraints
   cc-options: -std=c99 -D_GNU_SOURCE -Wno-gnu-folding-constant
   include-dirs:
@@ -58,9 +62,12 @@ library
     , base >=4.20 && <5
     , bytestring
     , errata
+    , finite-typelits
     , mtl
     , template-haskell >=2.20 && <3
     , text
+    , vector
+    , vector-sized
   default-language: GHC2024
   if flag(dev)
     ghc-options: -O0
@@ -80,6 +87,7 @@ test-suite core-tests
   default-extensions:
       TemplateHaskell
       TypeFamilies
+      PatternSynonyms
       OverloadedLabels
       OverloadedRecordDot
       DuplicateRecordFields
@@ -87,6 +95,7 @@ test-suite core-tests
       ScopedTypeVariables
       QuasiQuotes
       BlockArguments
+      ViewPatterns
   ghc-options: -Wall -Wredundant-constraints -Wx-no-partial
   cc-options: -std=c99 -D_GNU_SOURCE -Wno-gnu-folding-constant
   include-dirs:

@@ -11,6 +11,9 @@ library:
    - bytestring
    - mtl
    - errata
+   - vector-sized
+   - vector
+   - finite-typelits
   source-dirs: src
   include-dirs:
     - vendor/lib/include

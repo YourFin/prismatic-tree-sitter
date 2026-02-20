@@ -26,6 +26,7 @@ library
   default-extensions:
       TemplateHaskell
       TypeFamilies
+      PatternSynonyms
       OverloadedLabels
       OverloadedRecordDot
       DuplicateRecordFields
@@ -33,6 +34,7 @@ library
       ScopedTypeVariables
       QuasiQuotes
       BlockArguments
+      ViewPatterns
   ghc-options: -Wall -Wredundant-constraints
   cc-options: -std=c99 -D_GNU_SOURCE -Wno-gnu-folding-constant
   include-dirs:
