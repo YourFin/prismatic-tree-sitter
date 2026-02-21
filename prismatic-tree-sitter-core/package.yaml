@@ -41,6 +41,9 @@ tests:
      - hspec-contrib
      - hspec-discover
      - text
+     - vector-sized
+     - vector
+     - finite-typelits
     source-dirs: test
     include-dirs:
      - tst-cbits

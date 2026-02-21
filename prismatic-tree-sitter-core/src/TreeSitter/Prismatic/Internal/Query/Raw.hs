@@ -1,7 +1,17 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoFieldSelectors #-}
 
-module TreeSitter.Prismatic.Internal.Query.Raw where
+module TreeSitter.Prismatic.Internal.Query.Raw (
+  RawQuery (..),
+  RawQuery' (..),
+  new,
+  Pattern (..),
+  -- | Query Statements
+  Statement (..),
+  StatementArg (..),
+  QueryError (..),
+) where
 
 import Prelude hiding (lines, tail)
 
@@ -32,7 +42,6 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Finite (Finite (..), packFinite)
 import Data.Finite.Integral (finite, getFinite)
 import Data.Vector qualified as Unsized
-import Data.Vector.Sized (Vector)
 import Data.Vector.Sized qualified as Sized
 import Errata
 import Errata.Styles qualified as Errata
@@ -55,17 +64,12 @@ import Type.Reflection (Typeable)
 -- Where index in type level list represents the actual index
 -- into the query
 
-data RawQuery' patternCount captureCount
+data RawQuery' captureCount
   = RawQuery'
-  { unQuery :: !(ForeignPtr C'TSQuery)
-  , captureNames :: !(Vector captureCount Text)
-  , predicates :: !(Vector patternCount [Predicate captureCount])
-  , -- , captureQuantifiers :: Vector patternCount (Vector captureCount CaptureQuantifier)
-    --
-    -- , propertySettings :: Vector patternCount (Vector _ (QueryProperty captureCount))
-    -- , propertyPredicates :: Vector patternCount (Vector _ (QueryProperty captureCount, Bool))
-    -- , generalPredicates :: Vector patternCount (Vector _ (QueryPredicate captureCount))
-    source :: !Text
+  { queryForeign :: !(ForeignPtr C'TSQuery)
+  , captureNames :: !(Sized.Vector captureCount Text)
+  , patterns :: !(Unsized.Vector (Pattern captureCount))
+  , source :: !Text
   , -- Need to hold a handle on the raw language
     -- So the garbage collector doesn't kill it
     lang :: !RawLang
@@ -74,18 +78,12 @@ data RawQuery' patternCount captureCount
 
 data RawQuery where
   RawQuery ::
-    SNat patternCount ->
     SNat captureCount ->
     ( RawQuery'
-        patternCount
         captureCount
     ) ->
     RawQuery
   deriving (Typeable)
-
--- type RawQuery =
---   forall (patternCount :: Nat) (captureCount :: Nat).
---   (KnownNat patternCount, KnownNat captureCount) => RawQuery' patternCount captureCount
 
 {-| A key-value pair associated with a particular pattern in a [`Query`].
 TODO: parse, don't validate?
@@ -94,12 +92,37 @@ data QueryProperty captureCount = QueryProperty
   {key :: !Text, value :: !(Maybe Text), captureId :: !(Maybe (Finite captureCount))}
   deriving (Eq, Ord, Generic, Show)
 
-data Predicate captureCount = Predicate {operator :: !Text, args :: ![PredicateArg captureCount]}
+{-| Along with sets of nodes to match, patterns can
+    contain __Predicates__ and __Directives__ to be
+    evaluated. These /generally/ involve doing something
+    with captures from the matched nodes.
+    This library uses the `Statement` type as a superset
+    of both, as they cannot be nested.
+
+    By convention, __Predicate__ names end with @?@,
+    and __Directive__ names end with @!@. However, the
+    Tree-Sitter C Api doesn't make any distinction between
+    __Predicates__ and __Directives__; they are parsed the
+    same way, and evaluation is left to the calling code.
+
+    Official documentation: <https://tree-sitter.github.io/tree-sitter/using-parsers/queries/3-predicates-and-directives.html>
+-}
+data Statement captureCount = Statement {operator :: !Text, args :: !(Unsized.Vector (StatementArg captureCount))}
   deriving (Eq, Ord, Generic, Show)
 
-data PredicateArg captureCount
-  = PredicateArgCapture !(Finite captureCount)
-  | PredicateArgString !Text
+-- | An argument to a `Statement`
+data StatementArg captureCount
+  = StatementArgCapture !(Finite captureCount)
+  | StatementArgString !Text
+  deriving (Eq, Ord, Generic, Show)
+
+data Pattern captureCount = Pattern
+  { statements :: ![Statement captureCount]
+  , isRooted :: !Bool
+  , isNonLocal :: !Bool
+  , querySpanBytes :: !(Word32, Word32)
+  -- ^ Pattern start and end text byte in the overall query
+  }
   deriving (Eq, Ord, Generic, Show)
 
 data QueryError
@@ -246,12 +269,13 @@ new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left .
         kind <- peek errTypePtr
         pure $ Left $ QueryCompilationError{..}
       else runExceptT $ do
-        unQuery <- liftIO $ newForeignPtr p'ts_query_delete queryPtrMut
+        queryForeign <- liftIO $ newForeignPtr p'ts_query_delete queryPtrMut
 
         let captureCountW32 = c'ts_query_capture_count queryPtr
-        captureCount <- word32ToInt "capture count" captureCountW32
-        captureNames' <- forM [0 .. captureCountW32 - 1] \capIdx ->
+        captureCountInt <- word32ToInt "capture count" captureCountW32
+        captureNames' <- forM [0 .. captureCountInt - 1] \capIdx' ->
           alloca' $ \strLenPtr -> do
+            capIdx <- intToWord32 "capture idx" capIdx'
             (ConstPtr strPtr) <- liftIO $ c'ts_query_capture_name_for_id queryPtr capIdx strLenPtr
             strLen' <- liftIO $ peek strLenPtr
             strLen <- word32ToInt "capture name length" strLen'
@@ -260,6 +284,7 @@ new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left .
 
         stringLiteralCount <-
           c'ts_query_string_count queryPtr & word32ToInt "string literal count"
+
         stringLiterals <- Unsized.generateM stringLiteralCount \strLitIdx' ->
           alloca' $ \strLenPtr -> do
             strLitIdx <- intToWord32 "string literal index" strLitIdx'
@@ -270,27 +295,28 @@ new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left .
             pure $ Text.decodeUtf8Lenient bytes
 
         let stringLitByIdx =
-              ( \idx -> do
+              ( \prefix idx -> do
                   intIdx <- word32ToInt "string literal index" idx
                   case (stringLiterals Unsized.!? intIdx) of
                     (Just str) -> pure str
                     Nothing ->
                       unexpected $
-                        "Requested string literal #"
+                        prefix
+                          <> ": Requested string literal #"
                           <> show intIdx
                           <> ( case Unsized.length stringLiterals of
                                  0 -> "; when query contained none"
                                  len -> ", max is " <> (show (len - 1))
                              )
               ) ::
-                Word32 -> QueryM Text
+                String -> Word32 -> QueryM Text
 
         patternCount <- c'ts_query_pattern_count queryPtr & word32ToInt "pattern count"
 
         Sized.withSizedList captureNames' $ \captureNames -> do
-          unsizedPreds <- Unsized.generateM patternCount $ \patIdx' -> do
+          patterns <- Unsized.generateM patternCount $ \patIdx' -> do
+            patIdx <- intToWord32 "pattern index" patIdx'
             rawPredSteps <- alloca' $ \stepCountPtr -> do
-              patIdx <- intToWord32 "pattern index" patIdx'
               predsPtr <- liftIO $ c'ts_query_predicates_for_pattern queryPtr patIdx stepCountPtr
               stepCount <- (liftIO . peek) stepCountPtr >>= word32ToInt "predicate steps"
               if stepCount == 0
@@ -299,54 +325,80 @@ new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left .
                 else do
                   liftIO $ peekConstArray stepCount predsPtr
 
-            rawPredSteps
-              & splitOn ((c'TSQueryPredicateStepTypeDone ==) . c'TSQueryPredicateStep'type)
-              & traverse \case
-                [] -> pure Nothing
-                ((StringStep operatorId) : argSteps) -> do
-                  operator <- stringLitByIdx operatorId
-                  args <- forM argSteps $ \case
-                    (StringStep id) -> do
-                      name <- stringLitByIdx id
-                      pure $ PredicateArgString name
-                    (CaptureStep idx) -> case packFinite (toInteger idx) of
-                      Just finiteIdx ->
-                        pure $ PredicateArgCapture finiteIdx
-                      Nothing ->
-                        unexpected $
-                          "Predicate contained reference to capture #"
-                            <> show idx
-                            <> ( case captureCount of
-                                   0 -> "; query has no captures"
-                                   _ -> ", max is " <> show (captureCount - 1)
-                               )
-                    (C'TSQueryPredicateStep{..}) ->
-                      unexpected $
-                        "Unexpected query predicate step type "
-                          <> show c'TSQueryPredicateStep'type
-                          <> "; expected type String ("
-                          <> show (c'TSQueryPredicateStepTypeString @Int)
-                          <> ") or Capture ("
-                          <> show (c'TSQueryPredicateStepTypeCapture @Int)
-                          <> ")"
-                  pure $ Just Predicate{..}
-                (C'TSQueryPredicateStep{..} : _) ->
-                  unexpected $
-                    "Unexpected query predicate step type "
-                      <> show c'TSQueryPredicateStep'type
-                      <> "; expected type String ("
-                      <> show (c'TSQueryPredicateStepTypeString @Int)
-                      <> ")"
-              <&> catMaybes
+            statements <-
+              rawPredSteps
+                & splitOn ((c'TSQueryPredicateStepTypeDone ==) . c'TSQueryPredicateStep'type)
+                <&> zip [0 ..]
+                & zip [0 ..]
+                & traverse
+                  ( \(predIdx, predStep) ->
+                      let errPrefix = "In pattern " <> show patIdx <> ", predicate " <> show predIdx
+                       in case predStep of
+                            [] -> pure Nothing
+                            ((_, StringStep operatorId) : (Unsized.fromList -> argSteps)) -> do
+                              operator <- stringLitByIdx (errPrefix <> ", loc 0") operatorId
+                              args <- forM argSteps $ \(locIdx, step) ->
+                                let errPrefix' = errPrefix <> ", location " <> show locIdx
+                                 in case step of
+                                      (StringStep id) -> do
+                                        name <- stringLitByIdx errPrefix' id
+                                        pure $ StatementArgString name
+                                      (CaptureStep idx) -> case packFinite (toInteger idx) of
+                                        Just finiteIdx ->
+                                          pure $ StatementArgCapture finiteIdx
+                                        Nothing ->
+                                          unexpected $
+                                            errPrefix'
+                                              <> ": Statement contained reference to capture #"
+                                              <> show idx
+                                              <> ( case captureCountInt of
+                                                     0 -> "; query has no captures"
+                                                     _ -> ", max is " <> show (captureCountInt - 1)
+                                                 )
+                                      (C'TSQueryPredicateStep{..}) ->
+                                        unexpected $
+                                          errPrefix'
+                                            <> show c'TSQueryPredicateStep'type
+                                            <> "; expected type String ("
+                                            <> show (c'TSQueryPredicateStepTypeString @Int)
+                                            <> ") or Capture ("
+                                            <> show (c'TSQueryPredicateStepTypeCapture @Int)
+                                            <> ")"
+                              pure $ Just Statement{..}
+                            ((_, C'TSQueryPredicateStep{..}) : _) ->
+                              unexpected $
+                                "In pattern "
+                                  <> show patIdx
+                                  <> ": Unexpected query predicate step type "
+                                  <> show c'TSQueryPredicateStep'type
+                                  <> "; expected type String ("
+                                  <> show (c'TSQueryPredicateStepTypeString @Int)
+                                  <> ")"
+                  )
+                <&> catMaybes
+
+            pure
+              Pattern
+                { statements
+                , isRooted =
+                    c'ts_query_is_pattern_rooted queryPtr patIdx
+                      & toBool
+                , isNonLocal =
+                    c'ts_query_is_pattern_non_local queryPtr patIdx
+                      & toBool
+                , querySpanBytes =
+                    ( c'ts_query_start_byte_for_pattern queryPtr patIdx
+                    , c'ts_query_end_byte_for_pattern queryPtr patIdx
+                    )
+                }
           -- end unsizedPreds
-          pure $ Sized.withSized unsizedPreds $ \predicates ->
-            RawQuery SNat SNat RawQuery'{source = query, ..}
+          pure $ RawQuery SNat RawQuery'{source = query, ..}
 
 -- TODO: audit unexpected messagses for consistency
 splitOn :: (a -> Bool) -> [a] -> [[a]]
-splitOn pred = foldl' f []
+splitOn p = foldr f []
  where
-  f acc a = case (acc, pred a) of
+  f a acc = case (acc, p a) of
     (_, True) -> [] : acc
     ([], False) -> [[a]]
     (cur : rest, _) -> (a : cur) : rest
@@ -361,35 +413,6 @@ pattern StringStep valueId <-
 pattern CaptureStep :: Word32 -> C'TSQueryPredicateStep
 pattern CaptureStep valueId <-
   C'TSQueryPredicateStep ((== c'TSQueryPredicateStepTypeCapture) -> True) valueId
-
--- patternCount :: RawQuery -> Word32
--- patternCount = flip withQueryPtrReferentiallyTransparent $ c'ts_query_pattern_count
---
--- captureCount :: RawQuery -> Word32
--- captureCount = flip withQueryPtrReferentiallyTransparent $ c'ts_query_capture_count
---
--- stringLiteralCount :: RawQuery -> Word32
--- stringLiteralCount = flip withQueryPtrReferentiallyTransparent $ c'ts_query_string_count
-
--- -- | Check if the given pattern in the query has a single root node.
--- isPatternRooted :: RawQuery -> Word32 -> Bool
--- isPatternRooted query patternIdx = withQueryPtrReferentiallyTransparent query $ \queryPtr ->
---   c'ts_query_is_pattern_rooted queryPtr patternIdx
---     & toBool
--- {-# WARNING in "x-partial" isPatternRooted "pattern index argument can go out of bounds and read arbitrary memory" #-}
---
--- {-| Check if the given pattern in the query is 'non local'.
---
---   A non-local pattern has multiple root nodes and can match within a
---   repeating sequence of nodes, as specified by the grammar. Non-local
---   patterns disable certain optimizations that would otherwise be possible
---   when executing a query on a specific range of a syntax tree.
--- -}
--- isPatternNonLocal :: RawQuery -> Word32 -> Bool
--- isPatternNonLocal query patternIdx = withQueryPtrReferentiallyTransparent query $ \queryPtr ->
---   c'ts_query_is_pattern_non_local queryPtr patternIdx
---     & toBool
--- {-# WARNING in "x-partial" isPatternNonLocal "pattern index argument can go out of bounds and read arbitrary memory" #-}
 
 -- TODO: ts_query_is_pattern_guaranteed_at_step
 

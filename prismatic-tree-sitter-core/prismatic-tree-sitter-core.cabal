@@ -26,8 +26,7 @@ library
       TreeSitter.Prismatic.Internal.Language.Raw
       TreeSitter.Prismatic.Internal.Language.SymbolType
       TreeSitter.Prismatic.Internal.Language.TH
-      TreeSitter.Prismatic.Internal.Query.CaptureQuantifier
-      TreeSitter.Prismatic.Internal.Query.Pattern
+      TreeSitter.Prismatic.Internal.Node
       TreeSitter.Prismatic.Internal.Query.Raw
       TreeSitter.Prismatic.Internal.Tree
   other-modules:
@@ -106,11 +105,14 @@ test-suite core-tests
       hspec-discover:hspec-discover
   build-depends:
       base >=4.20 && <5
+    , finite-typelits
     , hspec
     , hspec-contrib
     , hspec-discover
     , prismatic-tree-sitter-core
     , text
+    , vector
+    , vector-sized
   default-language: GHC2024
   if flag(dev)
     ghc-options: -O0
