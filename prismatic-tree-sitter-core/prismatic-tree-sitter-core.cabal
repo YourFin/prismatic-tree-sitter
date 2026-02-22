@@ -79,6 +79,7 @@ test-suite core-tests
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Test.QuickCheck.Orphans
       TreeSitter.Prismatic.Internal.Query.RawSpec
       TreeSitter.Prismatic.Language.Json
       TreeSitter.Prismatic.Language.Json.Raw
@@ -109,6 +110,7 @@ test-suite core-tests
       QuickCheck
     , base >=4.20 && <5
     , finite-typelits
+    , generic-random
     , hspec
     , hspec-contrib
     , hspec-discover

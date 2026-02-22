@@ -45,6 +45,7 @@ tests:
      - vector-sized
      - vector
      - prettyprinter
+     - generic-random
      - QuickCheck
      - finite-typelits
     source-dirs: test
