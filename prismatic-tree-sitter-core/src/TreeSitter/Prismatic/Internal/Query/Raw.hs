@@ -1,4 +1,3 @@
-{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoFieldSelectors #-}
 
@@ -10,7 +9,11 @@ module TreeSitter.Prismatic.Internal.Query.Raw (
   -- | Query Statements
   Statement (..),
   StatementArg (..),
+  resolveStatementArg,
   QueryError (..),
+
+  -- | Capture
+  CaptureQuantifier(..)
 ) where
 
 import Prelude hiding (lines, tail)
@@ -39,8 +42,8 @@ import Control.Monad.Except (
   runExceptT,
  )
 import Control.Monad.IO.Class (liftIO)
-import Data.Finite (Finite (..), packFinite)
-import Data.Finite.Integral (finite, getFinite)
+import Data.Finite (Finite, packFinite)
+import Data.Finite.Integral (KnownIntegral)
 import Data.Vector qualified as Unsized
 import Data.Vector.Sized qualified as Sized
 import Errata
@@ -67,15 +70,25 @@ import Type.Reflection (Typeable)
 data RawQuery' captureCount
   = RawQuery'
   { queryForeign :: !(ForeignPtr C'TSQuery)
+  -- ^ C-Api pointer
   , captureNames :: !(Sized.Vector captureCount Text)
+  -- ^ The names of the capture in this query; id'd by index
   , patterns :: !(Unsized.Vector (Pattern captureCount))
+  -- ^ The `Pattern`s that make up this query; think top-level definitions
   , source :: !Text
   , -- Need to hold a handle on the raw language
     -- So the garbage collector doesn't kill it
     lang :: !RawLang
   }
   deriving (Eq, Ord, Generic)
+type role RawQuery' nominal
 
+{-|
+  RawQuery' contains the fields,
+  but the the type needs to be wrapped
+  so to existentially quantify the
+  capture count
+-}
 data RawQuery where
   RawQuery ::
     SNat captureCount ->
@@ -85,12 +98,7 @@ data RawQuery where
     RawQuery
   deriving (Typeable)
 
-{-| A key-value pair associated with a particular pattern in a [`Query`].
-TODO: parse, don't validate?
--}
-data QueryProperty captureCount = QueryProperty
-  {key :: !Text, value :: !(Maybe Text), captureId :: !(Maybe (Finite captureCount))}
-  deriving (Eq, Ord, Generic, Show)
+-- TODO: Eq, Ord, Show impl for RawQuery
 
 {-| Along with sets of nodes to match, patterns can
     contain __Predicates__ and __Directives__ to be
@@ -112,16 +120,26 @@ data Statement captureCount = Statement {operator :: !Text, args :: !(Unsized.Ve
 
 -- | An argument to a `Statement`
 data StatementArg captureCount
-  = StatementArgCapture !(Finite captureCount)
+  = StatementArgCapture !(Data.Finite.Finite captureCount)
   | StatementArgString !Text
   deriving (Eq, Ord, Generic, Show)
 
+resolveStatementArg :: RawQuery' c -> StatementArg c -> Text
+resolveStatementArg RawQuery'{..} (StatementArgCapture count) =
+  Sized.index captureNames count
+resolveStatementArg _ (StatementArgString n) = n
+
 data Pattern captureCount = Pattern
-  { statements :: ![Statement captureCount]
-  , isRooted :: !Bool
-  , isNonLocal :: !Bool
-  , querySpanBytes :: !(Word32, Word32)
+  { querySpanBytes :: !(Word32, Word32)
   -- ^ Pattern start and end text byte in the overall query
+  , isRooted :: !Bool
+  -- ^
+  , isLocal :: !Bool
+  -- ^ 
+  , statements :: !(Unsized.Vector (Statement captureCount))
+  -- ^ The `Statement`s to be evaluated as part of matching this pattern
+  , captureQuantifiers :: !(Sized.Vector captureCount CaptureQuantifier)
+  -- ^ 
   }
   deriving (Eq, Ord, Generic, Show)
 
@@ -316,6 +334,7 @@ new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left .
         Sized.withSizedList captureNames' $ \captureNames -> do
           patterns <- Unsized.generateM patternCount $ \patIdx' -> do
             patIdx <- intToWord32 "pattern index" patIdx'
+
             rawPredSteps <- alloca' $ \stepCountPtr -> do
               predsPtr <- liftIO $ c'ts_query_predicates_for_pattern queryPtr patIdx stepCountPtr
               stepCount <- (liftIO . peek) stepCountPtr >>= word32ToInt "predicate steps"
@@ -328,8 +347,9 @@ new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left .
             statements <-
               rawPredSteps
                 & splitOn ((c'TSQueryPredicateStepTypeDone ==) . c'TSQueryPredicateStep'type)
-                <&> zip [0 ..]
-                & zip [0 ..]
+                <&> zip [(0 :: Int) ..]
+                & zip [(0 :: Int) ..]
+                -- Inject indexes for error messages ^^
                 & traverse
                   ( \(predIdx, predStep) ->
                       let errPrefix = "In pattern " <> show patIdx <> ", predicate " <> show predIdx
@@ -340,10 +360,10 @@ new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left .
                               args <- forM argSteps $ \(locIdx, step) ->
                                 let errPrefix' = errPrefix <> ", location " <> show locIdx
                                  in case step of
-                                      (StringStep id) -> do
-                                        name <- stringLitByIdx errPrefix' id
+                                      (StringStep idx) -> do
+                                        name <- stringLitByIdx errPrefix' idx
                                         pure $ StatementArgString name
-                                      (CaptureStep idx) -> case packFinite (toInteger idx) of
+                                      (CaptureStep idx) -> case Data.Finite.packFinite (toInteger idx) of
                                         Just finiteIdx ->
                                           pure $ StatementArgCapture finiteIdx
                                         Nothing ->
@@ -376,25 +396,32 @@ new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left .
                                   <> ")"
                   )
                 <&> catMaybes
+                <&> Unsized.fromList
+            -- end statements
+
+            captureQuantifiers <- Sized.generateM $ \captureIdx ->
+              c'ts_query_capture_quantifier_for_id queryPtr patIdx (finiteToWord32 captureIdx)
+                & parseCaptureQuantifier
 
             pure
               Pattern
                 { statements
+                , captureQuantifiers
                 , isRooted =
                     c'ts_query_is_pattern_rooted queryPtr patIdx
                       & toBool
-                , isNonLocal =
+                , isLocal =
                     c'ts_query_is_pattern_non_local queryPtr patIdx
                       & toBool
+                      & not
                 , querySpanBytes =
                     ( c'ts_query_start_byte_for_pattern queryPtr patIdx
                     , c'ts_query_end_byte_for_pattern queryPtr patIdx
                     )
                 }
-          -- end unsizedPreds
+
           pure $ RawQuery SNat RawQuery'{source = query, ..}
 
--- TODO: audit unexpected messagses for consistency
 splitOn :: (a -> Bool) -> [a] -> [[a]]
 splitOn p = foldr f []
  where
@@ -402,9 +429,6 @@ splitOn p = foldr f []
     (_, True) -> [] : acc
     ([], False) -> [[a]]
     (cur : rest, _) -> (a : cur) : rest
-
-pattern FiniteWord32 :: Word32 -> Finite n
-pattern FiniteWord32 x <- (fromInteger . getFinite -> x)
 
 pattern StringStep :: Word32 -> C'TSQueryPredicateStep
 pattern StringStep valueId <-
@@ -492,10 +516,8 @@ must not have side effects.
 -- withQueryPtrReferentiallyTransparent query closure =
 --   unsafePerformIO $ withForeignConstPtr (unQuery query) $ \ptr -> pure $ closure ptr
 
-unsafePerformIO_queryError :: (MonadError QueryError m) => QueryM a -> m a
-unsafePerformIO_queryError ma = case unsafePerformIO $ runExceptT ma of
-  Right a -> pure a
-  Left e -> throwError e
+finiteToWord32 :: (KnownIntegral Integer n) => Data.Finite.Finite n -> Word32
+finiteToWord32 = fromInteger . toInteger
 
 withForeignConstPtr :: ForeignPtr a -> (ConstPtr a -> IO b) -> IO b
 withForeignConstPtr fp closure = withForeignPtr fp $ \ptr -> closure (ConstPtr ptr)
@@ -513,7 +535,7 @@ safeCastIntegerlike ::
 safeCastIntegerlike destTypeName valueName x
   | toInteger x > toInteger (maxBound @b) =
       unexpected $
-        "resulting query has more "
+        "Resulting query has more "
           <> valueName
           <> " ("
           <> show x

@@ -52,28 +52,31 @@ spec = do
             "((array _ @a _ @b) (#eq? @a @b))" <> "((number) @i (#set! j \"1\") (#eq? @i \"1\"))"
         patterns `shouldSatisfy` ((== 2) . length)
 
---    describe "isPatternRooted should work" $ do
---      it "for a rooted pattern" $ \compile -> do
---        compiled <- compile "(number)"
---        SUT.isPatternRooted compiled 0 `shouldBe` True
---      it "for a non-rooted pattern" $ \compile -> do
---        compiled <- compile "((number) . (number))"
---        SUT.isPatternRooted compiled 0 `shouldBe` False
---
---    describe "isPatternNonLocal" $ do
---      it "for a local pattern" $ \compile -> do
---        compiled <- compile "(number)"
---        SUT.isPatternRooted compiled 0 `shouldBe` True
---      it "for a non-local pattern" $ \compile -> do
---        compiled <- compile "((number) . (number))"
---        SUT.isPatternRooted compiled 0 `shouldBe` False
---    describe "captureNames" $ do
---      it "should pull capture names" $ \compile -> do
---        compiled <-
---          compile
---            "((string . \"\\\"\" @quote . _ @contents) (#eq? @contents \"hello!\"))"
---        names <- parseRight $ SUT.captureNames compiled
---        names `shouldBe` ["quote", "contents"]
+      describe "isPatternRooted should work" $ do
+        it "for a rooted pattern" $ \compile -> do
+          (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "(number)"
+          SUT.Pattern{..} <- parseHead patterns
+          isRooted `shouldBe` True
+        it "for a non-rooted pattern" $ \compile -> do
+          (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "((number) . (number))"
+          SUT.Pattern{..} <- parseHead patterns
+          isRooted `shouldBe` False
+
+      describe "isPatternLocal" $ do
+        it "for a local pattern" $ \compile -> do
+          (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "(number)"
+          SUT.Pattern{..} <- parseHead patterns
+          isLocal `shouldBe` True
+        it "for a non-local pattern" $ \compile -> do
+          (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "((number) . (number))"
+          SUT.Pattern{..} <- parseHead patterns
+          isLocal `shouldBe` False
+      describe "captureNames" $ do
+        it "should pull capture names" $ \compile -> do
+          (SUT.RawQuery _ SUT.RawQuery'{..}) <-
+            compile
+              "((string . \"\\\"\" @quote . _ @contents) (#eq? @contents \"hello!\"))"
+          (Sized.toList captureNames) `shouldBe` ["quote", "contents"]
 
 withCompileJson :: ((Text -> IO SUT.RawQuery) -> IO ()) -> IO ()
 withCompileJson action = withJsonRawLang $ \json -> do
