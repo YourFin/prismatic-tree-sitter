@@ -34,8 +34,8 @@ import Foreign.C.ConstPtr (ConstPtr (..))
 import Foreign.ForeignPtr (ForeignPtr, newForeignPtr, withForeignPtr)
 
 import Control.Exception.Base (SomeException)
-import Control.Monad (forM, join, when)
-import Control.Monad.Cont (ContT (ContT), cont, evalCont, evalContT)
+import Control.Monad (forM)
+import Control.Monad.Cont (cont, evalCont)
 import Control.Monad.Except (
   ExceptT (..),
   MonadError (throwError),
@@ -49,11 +49,11 @@ import Data.Vector.Sized qualified as Sized
 import Errata
 import Errata.Styles qualified as Errata
 import Foreign (Storable, alloca, nullPtr, peek)
-import Foreign.C (CUInt (CUInt))
+import Foreign.C (CUInt)
 import Foreign.Marshal.Utils (toBool)
 import Foreign.Ptr (Ptr)
 import GHC.Generics (Generic)
-import GHC.TypeLits (KnownNat, Nat, SNat, pattern SNat)
+import GHC.TypeLits (SNat, pattern SNat)
 import System.IO.Unsafe (unsafePerformIO)
 import TreeSitter.Prismatic.Internal.Binding
 import TreeSitter.Prismatic.Internal.Foreign.Array (peekConstArray)
@@ -439,82 +439,6 @@ pattern CaptureStep valueId <-
   C'TSQueryPredicateStep ((== c'TSQueryPredicateStepTypeCapture) -> True) valueId
 
 -- TODO: ts_query_is_pattern_guaranteed_at_step
-
-{-| Get all of the predicates for the given pattern in the query.
-
-The predicates are represented as a single array of steps. There are three
-types of steps in this array, which correspond to the three legal values for
-the `type` field:
-- `TSQueryPredicateStepTypeCapture` - Steps with this type represent names
-   of captures. Their `value_id` can be used with the
-  [`ts_query_capture_name_for_id`] function to obtain the name of the capture.
-- `TSQueryPredicateStepTypeString` - Steps with this type represent literal
-   strings. Their `value_id` can be used with the
-   [`ts_query_string_value_for_id`] function to obtain their string value.
-- `TSQueryPredicateStepTypeDone` - Steps with this type are *sentinels*
-   that represent the end of an individual predicate. If a pattern has two
-   predicates, then there will be two steps with this `type` in the array.
--}
-
--- predicatesForPattern :: RawQuery -> Word32 -> [C'TSQueryPredicateStep]
--- predicatesForPattern query patternIdx = unsafePerformIO $ withQueryPtrReferentiallyTransparent query $ \queryPtr ->
---   alloca $ \stepCountOut -> do
---     arrPtr <- c'ts_query_predicates_for_pattern queryPtr patternIdx stepCountOut
---     stepCount <- peek stepCountOut
---     when (toInteger stepCount > toInteger (maxBound :: Int)) $
---       fail
---         ( "Query predicate steps ("
---             <> show stepCount
---             <> ") greater than max : "
---             <> show (maxBound :: Int)
---         )
---     peekConstArray (fromEnum stepCount) arrPtr
--- {-# WARNING in "x-partial"
---   predicatesForPattern
---   "pattern index argument can go out of bounds and read arbitrary memory"
---   #-}
-
-{-| Get the name and length of one of the query's captures, or one of the
-  query's string literals. Each capture and string is associated with a
-  numeric id based on the order that it appeared in the query's source.
-
-  Port of ts_query_capture_name_for_id, which appears to have taken on the
-  string-literal fetching functionality later in life.
--}
-
--- captureNames :: (MonadError QueryError m) => RawQuery -> m [Text]
--- captureNames query = unsafePerformIO_queryError $ withQueryPtrReferentiallyTransparent query $ \queryPtr -> do
---   let capCount = captureCount query
---   forM [0 .. capCount - 1] \capIdx ->
---     alloca' $ \strLenPtr -> do
---       (ConstPtr strPtr) <- liftIO $ c'ts_query_capture_name_for_id queryPtr capIdx strLenPtr
---       strLen' <- liftIO $ peek strLenPtr
---       strLen <- word32ToInt "capture name length" strLen'
---       bytes <- liftIO $ ByteString.packCStringLen (strPtr, fromEnum strLen)
---       pure $ Text.decodeUtf8Lenient bytes
-
--- queryStringValueForId :: RawQuery -> Word32 -> Text
--- queryStringValueForId query predicateIdx = unsafePerformIO $ withQueryPtrReferentiallyTransparent query $ \queryPtr ->
---   alloca $ \strLenPtr -> do
---     (ConstPtr strPtr) <- c'ts_query_capture_name_for_id queryPtr predicateIdx strLenPtr
---     strLen <- peek strLenPtr
---     when (toInteger strLen > toInteger (maxBound :: Int)) $
---       fail
---         ( "Query capture has length ("
---             <> show strLen
---             <> "), greater than IntMax: "
---             <> show (maxBound :: Int)
---         )
---     bytes <- ByteString.packCStringLen (strPtr, fromEnum strLen)
---     pure $ Text.decodeUtf8Lenient bytes
-
-{-| UNSAFE - helper method for writing accessor methods against queries.
-must not have side effects.
--}
-
--- withQueryPtrReferentiallyTransparent :: RawQuery -> (ConstPtr C'TSQuery -> a) -> a
--- withQueryPtrReferentiallyTransparent query closure =
---   unsafePerformIO $ withForeignConstPtr (unQuery query) $ \ptr -> pure $ closure ptr
 
 finiteToWord32 :: (KnownIntegral Integer n) => Data.Finite.Finite n -> Word32
 finiteToWord32 = fromInteger . toInteger
