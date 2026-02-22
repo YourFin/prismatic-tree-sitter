@@ -26,7 +26,8 @@ library
       TreeSitter.Prismatic.Internal.Language.Raw
       TreeSitter.Prismatic.Internal.Language.SymbolType
       TreeSitter.Prismatic.Internal.Language.TH
-      TreeSitter.Prismatic.Internal.Node
+      TreeSitter.Prismatic.Internal.Query.CaptureQuantifier
+      TreeSitter.Prismatic.Internal.Query.Pattern
       TreeSitter.Prismatic.Internal.Query.Raw
       TreeSitter.Prismatic.Internal.Tree
   other-modules:
@@ -104,11 +105,13 @@ test-suite core-tests
   build-tool-depends:
       hspec-discover:hspec-discover
   build-depends:
-      base >=4.20 && <5
+      QuickCheck
+    , base >=4.20 && <5
     , finite-typelits
     , hspec
     , hspec-contrib
     , hspec-discover
+    , prettyprinter
     , prismatic-tree-sitter-core
     , text
     , vector

@@ -5,15 +5,16 @@ module TreeSitter.Prismatic.Internal.Query.Raw (
   RawQuery (..),
   RawQuery' (..),
   new,
+  -- | Patterns
   Pattern (..),
+  PatternLocality (..),
   -- | Query Statements
   Statement (..),
   StatementArg (..),
   resolveStatementArg,
   QueryError (..),
-
   -- | Capture
-  CaptureQuantifier(..)
+  CaptureQuantifier (..),
 ) where
 
 import Prelude hiding (lines, tail)
@@ -76,15 +77,17 @@ data RawQuery' captureCount
   , patterns :: !(Unsized.Vector (Pattern captureCount))
   -- ^ The `Pattern`s that make up this query; think top-level definitions
   , source :: !Text
-  , -- Need to hold a handle on the raw language
-    -- So the garbage collector doesn't kill it
-    lang :: !RawLang
+  -- ^ The query's source text
+  , lang :: !RawLang
+  {- ^ A handle on the corresponding language, to prevent premature
+  garbage collection
+  -}
   }
   deriving (Eq, Ord, Generic)
 type role RawQuery' nominal
 
 {-|
-  RawQuery' contains the fields,
+  `RawQuery\'` contains the fields,
   but the the type needs to be wrapped
   so to existentially quantify the
   capture count
@@ -122,7 +125,7 @@ data Statement captureCount = Statement {operator :: !Text, args :: !(Unsized.Ve
 data StatementArg captureCount
   = StatementArgCapture !(Data.Finite.Finite captureCount)
   | StatementArgString !Text
-  deriving (Eq, Ord, Generic, Show)
+  deriving (Eq, Ord, Show, Generic)
 
 resolveStatementArg :: RawQuery' c -> StatementArg c -> Text
 resolveStatementArg RawQuery'{..} (StatementArgCapture count) =
@@ -132,16 +135,50 @@ resolveStatementArg _ (StatementArgString n) = n
 data Pattern captureCount = Pattern
   { querySpanBytes :: !(Word32, Word32)
   -- ^ Pattern start and end text byte in the overall query
-  , isRooted :: !Bool
-  -- ^
-  , isLocal :: !Bool
-  -- ^ 
+  , locality :: PatternLocality
+  -- ^ See `PatternLocality`
   , statements :: !(Unsized.Vector (Statement captureCount))
   -- ^ The `Statement`s to be evaluated as part of matching this pattern
   , captureQuantifiers :: !(Sized.Vector captureCount CaptureQuantifier)
-  -- ^ 
+  -- ^ How often each capture in the parent query matches in this pattern
   }
   deriving (Eq, Ord, Generic, Show)
+
+{-| Normalized form of the data reported by the
+  @ts_query_is_pattern_rooted@ and
+  @ts_query_is_pattern_non_local@ C apis
+-}
+data PatternLocality
+  = -- | The pattern matches is contained under a single root node
+    SingleRootPattern
+  | {-| While the pattern does not have a single root node,
+        optimizations related to executing within a specific range
+        of a syntax tree still work.
+    -}
+    LocalPattern
+  | {-| A non-local pattern has multiple root nodes and can match
+        within a repeating sequence of nodes, as specified by the grammar.
+        Non-local patterns disable certain optimizations that would otherwise
+        be possible when executing a query on a specific range of a syntax tree.
+
+        (Editorial note) My suspicion is that local vs non-local patterns
+        rhymes with regular vs context-free grammars.
+    -}
+    NonLocalPattern
+  deriving (Eq, Ord, Show, Generic)
+
+parsePatternLocality ::
+  (MonadError QueryError m) => ConstPtr C'TSQuery -> Word32 -> m PatternLocality
+parsePatternLocality queryPtr patternIdx =
+  case ( toBool $ c'ts_query_is_pattern_rooted queryPtr patternIdx
+       , toBool $ c'ts_query_is_pattern_non_local queryPtr patternIdx
+       ) of
+    (True, False) -> pure SingleRootPattern
+    (False, False) -> pure LocalPattern
+    (False, True) -> pure NonLocalPattern
+    (True, True) ->
+      unexpected $
+        "Programming error; `ts_query_is_pattern_rooted` and `ts_query_is_pattern-non_local` both returned true, which this code thought impossible."
 
 data QueryError
   = -- | Query compilation error reported by the C api
@@ -157,14 +194,6 @@ data QueryError
     QueryErrorUnexpected !String
   | QueryErrorIOException !SomeException
   deriving (Generic)
-
-unexpected :: (MonadError QueryError m) => String -> m a
-unexpected = throwError . QueryErrorUnexpected
-
-unknownEnumVal :: (MonadError QueryError m, Show a) => String -> a -> m b
-unknownEnumVal enumName unknownValue =
-  unexpected $
-    "Got unknown value " <> show unknownValue <> " for the " <> enumName <> " enum"
 
 -- | Internal monad stack for query compilation
 type QueryM a = ExceptT QueryError IO a
@@ -403,17 +432,13 @@ new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left .
               c'ts_query_capture_quantifier_for_id queryPtr patIdx (finiteToWord32 captureIdx)
                 & parseCaptureQuantifier
 
+            locality <- parsePatternLocality queryPtr patIdx
+
             pure
               Pattern
                 { statements
                 , captureQuantifiers
-                , isRooted =
-                    c'ts_query_is_pattern_rooted queryPtr patIdx
-                      & toBool
-                , isLocal =
-                    c'ts_query_is_pattern_non_local queryPtr patIdx
-                      & toBool
-                      & not
+                , locality
                 , querySpanBytes =
                     ( c'ts_query_start_byte_for_pattern queryPtr patIdx
                     , c'ts_query_end_byte_for_pattern queryPtr patIdx
@@ -439,6 +464,14 @@ pattern CaptureStep valueId <-
   C'TSQueryPredicateStep ((== c'TSQueryPredicateStepTypeCapture) -> True) valueId
 
 -- TODO: ts_query_is_pattern_guaranteed_at_step
+
+unexpected :: (MonadError QueryError m) => String -> m a
+unexpected = throwError . QueryErrorUnexpected
+
+unknownEnumVal :: (MonadError QueryError m, Show a) => String -> a -> m b
+unknownEnumVal enumName unknownValue =
+  unexpected $
+    "Got unknown value " <> show unknownValue <> " for the " <> enumName <> " enum"
 
 finiteToWord32 :: (KnownIntegral Integer n) => Data.Finite.Finite n -> Word32
 finiteToWord32 = fromInteger . toInteger

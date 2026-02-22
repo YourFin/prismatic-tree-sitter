@@ -43,6 +43,8 @@ tests:
      - text
      - vector-sized
      - vector
+     - prettyprinter
+     - QuickCheck
      - finite-typelits
     source-dirs: test
     include-dirs:

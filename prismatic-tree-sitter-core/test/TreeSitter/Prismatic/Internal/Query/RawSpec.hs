@@ -6,9 +6,14 @@ import Test.Hspec
 
 import Control.Monad (forM_, void)
 import Data.Function ((&))
+import Data.Functor ((<&>))
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Vector qualified as Unsized
 import Data.Vector.Sized qualified as Sized
+import GHC.Generics (Generic)
+import Prettyprinter
 import TreeSitter.Prismatic.Internal.Binding
 import TreeSitter.Prismatic.Internal.Query.Raw qualified as SUT
 import TreeSitter.Prismatic.Language.Json.Raw (withJsonRawLang)
@@ -51,32 +56,34 @@ spec = do
           compile $
             "((array _ @a _ @b) (#eq? @a @b))" <> "((number) @i (#set! j \"1\") (#eq? @i \"1\"))"
         patterns `shouldSatisfy` ((== 2) . length)
-
-      describe "isPatternRooted should work" $ do
+      describe "should read locality correctly" $ do
         it "for a rooted pattern" $ \compile -> do
           (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "(number)"
           SUT.Pattern{..} <- parseHead patterns
-          isRooted `shouldBe` True
-        it "for a non-rooted pattern" $ \compile -> do
-          (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "((number) . (number))"
-          SUT.Pattern{..} <- parseHead patterns
-          isRooted `shouldBe` False
-
-      describe "isPatternLocal" $ do
+          locality `shouldBe` SUT.SingleRootPattern
         it "for a local pattern" $ \compile -> do
-          (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "(number)"
+          (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "(number)+"
           SUT.Pattern{..} <- parseHead patterns
-          isLocal `shouldBe` True
-        it "for a non-local pattern" $ \compile -> do
-          (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "((number) . (number))"
-          SUT.Pattern{..} <- parseHead patterns
-          isLocal `shouldBe` False
-      describe "captureNames" $ do
-        it "should pull capture names" $ \compile -> do
-          (SUT.RawQuery _ SUT.RawQuery'{..}) <-
-            compile
-              "((string . \"\\\"\" @quote . _ @contents) (#eq? @contents \"hello!\"))"
-          (Sized.toList captureNames) `shouldBe` ["quote", "contents"]
+          locality `shouldBe` SUT.LocalPattern
+        describe "for non-local pattern"
+          $ forM_
+            [ "((number)+)"
+            , "((number) (number))"
+            , "((number) . (number))"
+            , "(array . (number)+ .)"
+            , "(. (number) . (number) .)"
+            ]
+          $ \query -> it (show query) \compile -> do
+            (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "((number) . (number))"
+            Unsized.length patterns `shouldBe` 1
+            SUT.Pattern{..} <- parseHead patterns
+            locality `shouldBe` SUT.NonLocalPattern
+
+      it "should pull capture names" $ \compile -> do
+        (SUT.RawQuery _ SUT.RawQuery'{..}) <-
+          compile
+            "((string . \"\\\"\" @quote . _ @contents) (#eq? @contents \"hello!\"))"
+        (Sized.toList captureNames) `shouldBe` ["quote", "contents"]
 
 withCompileJson :: ((Text -> IO SUT.RawQuery) -> IO ()) -> IO ()
 withCompileJson action = withJsonRawLang $ \json -> do
@@ -103,3 +110,93 @@ shouldBeRight x = void $ parseRight x
 shouldBeLeft :: Either e a -> Expectation
 shouldBeLeft (Right _) = expectationFailure $ "Expected Left; got Right"
 shouldBeLeft (Left _) = pure ()
+
+data Dot = Dot
+  deriving (Eq, Ord, Generic)
+
+instance Pretty Dot where
+  pretty Dot = pt "."
+
+newtype EitherP a b = EitherP {unEitherP :: Either a b}
+  deriving stock (Generic)
+  deriving newtype (Eq, Ord, Show, Functor)
+
+instance (Pretty a, Pretty b) => Pretty (EitherP a b) where
+  pretty (EitherP (Left a)) = pretty a
+  pretty (EitherP (Right b)) = pretty b
+
+newtype DotList a = DotList {unDotList :: [EitherP Dot a]}
+  deriving (Eq, Ord, Generic, Functor)
+
+instance (Pretty a) => Pretty (DotList a) where
+  pretty (DotList lst) = sep (pretty <$> lst)
+
+type ArbJsonQueryExpr = Capturable (Wildcarded ArbJsonQueryExpr')
+
+data ArbJsonQueryExpr'
+  = TrueExpr
+  | NullExpr
+  | NumberExpr
+  | WildcardNamedExpr
+  | WildcardUnnamedExpr
+  | ErrorNodeExpr
+  | MissingNodeExpr
+  | OneOfExpr (NonEmpty ArbJsonQueryExpr)
+  | ArrayExpr (DotList ArbJsonQueryExpr)
+  | ObjectExpr (DotList (Wildcarded ((Capturable Text), ArbJsonQueryExpr)))
+  deriving (Eq, Ord, Generic)
+
+instance Pretty ArbJsonQueryExpr' where
+  pretty TrueExpr = pt "(true)"
+  pretty NullExpr = pt "(null)"
+  pretty NumberExpr = pt "(number)"
+  pretty WildcardNamedExpr = pt "(_)"
+  pretty WildcardUnnamedExpr = "_"
+  pretty ErrorNodeExpr = pt "(ERROR)"
+  pretty MissingNodeExpr = pt "(MISSING)"
+  pretty (OneOfExpr exprs) = brackets $ nest 2 $ sep $ pretty <$> (NonEmpty.toList exprs)
+  pretty (ArrayExpr exprs) = sexp "array" $ unDotList exprs
+  pretty (ObjectExpr (DotList kvs)) =
+    sexp "object" $
+      ( ( kvs
+            <&> ( (fmap . fmap) \(k, v) ->
+                    AnyDoc $ sexp "pair" $ [anyDoc k, anyDoc v]
+                )
+        )
+      )
+
+sexp :: (Pretty a) => Text -> [a] -> Doc ann
+sexp name args = parens $ pt name <> space <> (nest 2 $ sep $ pretty <$> args)
+
+data Wildcarded a
+  = NoWildcard a
+  | ManyPlus a
+  | ManyStar a
+  deriving (Eq, Ord, Generic, Functor)
+
+instance (Pretty a) => Pretty (Wildcarded a) where
+  pretty = \case
+    (NoWildcard a) -> pretty a
+    (ManyPlus a) -> pretty a <> pt "+"
+    (ManyStar a) -> pretty a <> pt "*"
+
+data Capturable a
+  = Uncaptured a
+  | Captured Text a
+  deriving (Eq, Ord, Generic, Functor)
+
+instance (Pretty a) => Pretty (Capturable a) where
+  pretty (Uncaptured a) = pretty a
+  pretty (Captured name a) = pretty a <> space <> pt "@" <> pretty name
+
+data AnyDoc where
+  AnyDoc :: (forall ann. Doc ann) -> AnyDoc
+
+anyDoc :: (Pretty a) => a -> AnyDoc
+anyDoc a = AnyDoc $ pretty a
+
+instance Pretty AnyDoc where
+  pretty (AnyDoc a) = a
+
+pt :: Text -> Doc ann
+pt = pretty
