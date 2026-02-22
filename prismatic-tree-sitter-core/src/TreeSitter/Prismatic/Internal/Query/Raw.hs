@@ -20,7 +20,7 @@ module TreeSitter.Prismatic.Internal.Query.Raw (
 import Prelude hiding (lines, tail)
 
 import Control.Exception (Exception)
-import Control.Exception qualified
+import Control.Exception.Safe qualified
 import Data.ByteString qualified as ByteString
 import Data.Function ((&))
 import Data.Functor ((<&>))
@@ -301,7 +301,7 @@ parseCaptureQuantifier cval
   | otherwise = unknownEnumVal "TSQuantifier" cval
 
 new :: RawLang -> Text -> Either QueryError RawQuery
-new lang query = unsafePerformIO $ (flip Control.Exception.catch) (pure . Left . QueryErrorIOException) $ evalCont do
+new lang query = unsafePerformIO $ (flip Control.Exception.Safe.catch) (pure . Left . QueryErrorIOException) $ evalCont do
   langPtr <- cont $ withForeignConstPtr (unLang lang)
   (queryTextPtr, queryLen) <- cont $ Text.withCStringLen query
   errOffsetPtr <- cont $ alloca @Word32
