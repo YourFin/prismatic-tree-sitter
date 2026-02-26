@@ -59,6 +59,26 @@
 //! arborium = { version = "0.1", features = ["all-languages"] }
 //! ```
 //!
+//! ## Supported Languages
+//!
+//! ### Permissively Licensed (<%= permissive_grammars.len() %> languages, included by default)
+//!
+//! | Language | Feature Flag | License |
+//! |----------|--------------|---------|
+<% for grammar in permissive_grammars { %>
+//! | <%= grammar.name %> | `<%= grammar.feature %>` | <%= grammar.license %> |
+<% } %>
+//!
+//! ### GPL Licensed (<%= gpl_grammars.len() %> languages, opt-in)
+//!
+//! These require explicit opt-in via feature flags due to their copyleft license.
+//!
+//! | Language | Feature Flag | License |
+//! |----------|--------------|---------|
+<% for grammar in gpl_grammars { %>
+//! | <%= grammar.name %> | `<%= grammar.feature %>` | <%= grammar.license %> |
+<% } %>
+//!
 //! # Advanced Usage
 //!
 //! For building custom grammar providers or working with raw spans, see the
@@ -185,3 +205,31 @@ pub fn detect_language(path: &str) -> Option<&'static str> {
 pub use <%= crate_name.replace('-', "_") %> as lang_<%= grammar_id.replace('-', "_") %>;
 
 <% } %>
+
+/// Returns the tree-sitter `Language` for the given language name.
+///
+/// This function only returns languages that are enabled via feature flags.
+/// If no grammar matches the provided language name, it returns `None`.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use arborium::get_language;
+///
+/// // Returns Some if the "lang-rust" feature is enabled
+/// if let Some(lang) = get_language("rust") {
+///     println!("Got Rust language: {:?}", lang);
+/// }
+///
+/// // Returns None for unknown languages
+/// assert!(get_language("unknown-language").is_none());
+/// ```
+pub fn get_language(name: &str) -> Option<tree_sitter::Language> {
+    match name {
+<% for (crate_name, grammar_id) in grammars { %>
+        #[cfg(feature = "lang-<%= grammar_id %>")]
+        "<%= grammar_id %>" => Some(<%= crate_name.replace('-', "_") %>::language().into()),
+<% } %>
+        _ => None,
+    }
+}
