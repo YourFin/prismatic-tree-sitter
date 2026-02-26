@@ -27,7 +27,6 @@ library
       TreeSitter.Prismatic.Internal.Language.SymbolType
       TreeSitter.Prismatic.Internal.Language.TH
       TreeSitter.Prismatic.Internal.Query.CaptureQuantifier
-      TreeSitter.Prismatic.Internal.Query.Pattern
       TreeSitter.Prismatic.Internal.Query.Raw
       TreeSitter.Prismatic.Internal.Tree
   other-modules:
@@ -61,6 +60,7 @@ library
       array
     , base >=4.20 && <5
     , bytestring
+    , deepseq >=1.1
     , errata
     , finite-typelits
     , mtl
@@ -109,6 +109,7 @@ test-suite core-tests
   build-depends:
       QuickCheck
     , base >=4.20 && <5
+    , deepseq >=1.1
     , finite-typelits
     , generic-random
     , hspec

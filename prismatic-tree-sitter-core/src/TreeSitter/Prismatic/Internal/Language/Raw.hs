@@ -1,5 +1,6 @@
 module TreeSitter.Prismatic.Internal.Language.Raw where
 
+import Control.DeepSeq (NFData (..), rwhnf)
 import Control.Monad (forM)
 import Data.Array (Array)
 import Data.Array qualified as Array
@@ -23,6 +24,9 @@ import TreeSitter.Prismatic.Internal.Language.SymbolType qualified as SymbolType
 
 newtype RawLang = RawLang {unLang :: ForeignPtr C'TSLanguage}
   deriving (Eq, Ord)
+
+instance NFData RawLang where
+  rnf (RawLang lang) = rwhnf lang
 
 mkLang :: IO (ConstPtr C'TSLanguage) -> IO RawLang
 mkLang tree_sitter_lang = do

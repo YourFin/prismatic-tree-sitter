@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoFieldSelectors #-}
 
@@ -34,6 +35,7 @@ import Data.Word (Word32)
 import Foreign.C.ConstPtr (ConstPtr (..))
 import Foreign.ForeignPtr (ForeignPtr, newForeignPtr, withForeignPtr)
 
+import Control.DeepSeq (NFData (rnf), rwhnf)
 import Control.Exception.Base (SomeException)
 import Control.Monad (forM)
 import Control.Monad.Cont (cont, evalCont)
@@ -54,7 +56,7 @@ import Foreign.C (CUInt)
 import Foreign.Marshal.Utils (toBool)
 import Foreign.Ptr (Ptr)
 import GHC.Generics (Generic)
-import GHC.TypeLits (SNat, pattern SNat)
+import GHC.TypeLits (SNat, fromSNat, pattern SNat)
 import System.IO.Unsafe (unsafePerformIO)
 import TreeSitter.Prismatic.Internal.Binding
 import TreeSitter.Prismatic.Internal.Foreign.Array (peekConstArray)
@@ -86,6 +88,15 @@ data RawQuery' captureCount
   deriving (Eq, Ord, Generic)
 type role RawQuery' nominal
 
+instance NFData (RawQuery' captureCount) where
+  rnf (RawQuery'{..}) =
+    rwhnf queryForeign `seq`
+      rnf captureNames `seq`
+        rnf patterns `seq`
+          rnf source `seq`
+            rnf lang `seq`
+              rnf lang
+
 {-|
   `RawQuery\'` contains the fields,
   but the the type needs to be wrapped
@@ -100,6 +111,9 @@ data RawQuery where
     ) ->
     RawQuery
   deriving (Typeable)
+
+instance NFData RawQuery where
+  rnf (RawQuery c rq) = rnf (fromSNat c) `seq` rnf rq
 
 -- TODO: Eq, Ord, Show impl for RawQuery
 
@@ -119,13 +133,13 @@ data RawQuery where
     Official documentation: <https://tree-sitter.github.io/tree-sitter/using-parsers/queries/3-predicates-and-directives.html>
 -}
 data Statement captureCount = Statement {operator :: !Text, args :: !(Unsized.Vector (StatementArg captureCount))}
-  deriving (Eq, Ord, Generic, Show)
+  deriving (Eq, Ord, Generic, Show, NFData)
 
 -- | An argument to a `Statement`
 data StatementArg captureCount
   = StatementArgCapture !(Data.Finite.Finite captureCount)
   | StatementArgString !Text
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Eq, Ord, Show, Generic, NFData)
 
 resolveStatementArg :: RawQuery' c -> StatementArg c -> Text
 resolveStatementArg RawQuery'{..} (StatementArgCapture count) =
@@ -135,14 +149,14 @@ resolveStatementArg _ (StatementArgString n) = n
 data Pattern captureCount = Pattern
   { querySpanBytes :: !(Word32, Word32)
   -- ^ Pattern start and end text byte in the overall query
-  , locality :: PatternLocality
+  , locality :: !PatternLocality
   -- ^ See `PatternLocality`
   , statements :: !(Unsized.Vector (Statement captureCount))
   -- ^ The `Statement`s to be evaluated as part of matching this pattern
   , captureQuantifiers :: !(Sized.Vector captureCount CaptureQuantifier)
   -- ^ How often each capture in the parent query matches in this pattern
   }
-  deriving (Eq, Ord, Generic, Show)
+  deriving (Eq, Ord, Generic, Show, NFData)
 
 {-| Normalized form of the data reported by the
   @ts_query_is_pattern_rooted@ and
@@ -154,6 +168,11 @@ data PatternLocality
   | {-| While the pattern does not have a single root node,
         optimizations related to executing within a specific range
         of a syntax tree still work.
+
+        Experimental testing on the JSON grammar showed that this
+        is a rare case; for practical patterns, locality and
+        rooted-ness are almost always comorbid, and the
+        cases where they're not are weirder than you think.
     -}
     LocalPattern
   | {-| A non-local pattern has multiple root nodes and can match
@@ -165,7 +184,7 @@ data PatternLocality
         rhymes with regular vs context-free grammars.
     -}
     NonLocalPattern
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Eq, Ord, Show, Generic, NFData)
 
 parsePatternLocality ::
   (MonadError QueryError m) => ConstPtr C'TSQuery -> Word32 -> m PatternLocality
@@ -288,7 +307,7 @@ data CaptureQuantifier
   | CaptureQuantifierZeroOrMore
   | CaptureQuantifierOne
   | CaptureQuantifierOneOrMore
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic, NFData)
 
 parseCaptureQuantifier ::
   (MonadError QueryError m) => C'TSQuantifier -> m CaptureQuantifier

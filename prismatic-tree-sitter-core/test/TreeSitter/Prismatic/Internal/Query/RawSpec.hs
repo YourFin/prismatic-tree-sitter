@@ -9,6 +9,7 @@ import Test.QuickCheck
 import Test.QuickCheck qualified as QuickCheck
 import Test.QuickCheck.Orphans
 
+import Control.DeepSeq (rnf)
 import Control.Monad (forM_, void)
 import Data.Function ((&))
 import Data.Functor (($>), (<&>))
@@ -16,6 +17,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Vector qualified as Unsized
 import Data.Vector.Sized qualified as Sized
 import GHC.Generics (Generic)
@@ -29,7 +31,7 @@ import TreeSitter.Prismatic.Internal.Query.Raw qualified as SUT
 import TreeSitter.Prismatic.Language.Json.Raw (withJsonRawLang)
 
 spec :: Spec
-spec = do
+spec = parallel $ do
   describe "new" do
     around withJsonRawLang $ do
       it "simple creation succeeds" $ \json -> do
@@ -71,10 +73,16 @@ spec = do
           (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "(number)"
           SUT.Pattern{..} <- parseHead patterns
           locality `shouldBe` SUT.SingleRootPattern
-        it "for a local pattern" $ \compile -> do
-          (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile "(number)+"
-          SUT.Pattern{..} <- parseHead patterns
-          locality `shouldBe` SUT.LocalPattern
+        describe "for local pattern"
+          $ forM_
+            [ "(MISSING)+"
+            , "[(_)* (_)]"
+            ]
+          $ \query -> it (show query) \compile -> do
+            -- These guys are pretty hard to find
+            (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile query
+            SUT.Pattern{..} <- parseHead patterns
+            locality `shouldBe` SUT.LocalPattern
         describe "for non-local pattern"
           $ forM_
             [ "((number)+)"
@@ -95,9 +103,20 @@ spec = do
             "((string . \"\\\"\" @quote . _ @contents) (#eq? @contents \"hello!\"))"
         (Sized.toList captureNames) `shouldBe` ["quote", "contents"]
 
-      it "parses generated queries" $ \compile -> forallJsonExpr $ \expr -> do
-        _ <- compile expr
-        pure ()
+      -- These tests tend to hang
+      -- Running theory is that they hit either:
+      --  - An infinite loop in the query compiler
+      --  - A degenerate case; query compilation takes factorial time in database land
+      -- This is a bug in tree sitter, but probably a low-priority one.
+      xit "parses arbitrary generated queries" $ \compile -> withMaxSuccess 1000 $ forallJsonExpr $ \expr -> do
+        q <- compile expr
+        pure $ rnf q
+      -- Helper that was needed to find instances of local but unrooted patterns
+      xit "should only generate local patterns with MISSING or _" $ \compile -> withMaxSuccess 1000 $ forallJsonExpr $ \expr ->
+        (not $ any (`Text.isInfixOf` expr) ["MISSING", "_"]) ==> do
+          (SUT.RawQuery _ SUT.RawQuery'{..}) <- compile expr
+          forM_ patterns $ \(SUT.Pattern{..}) ->
+            locality `shouldNotBe` SUT.LocalPattern
 
 withCompileJson :: ((Text -> IO SUT.RawQuery) -> IO ()) -> IO ()
 withCompileJson action = withJsonRawLang $ \json -> do
@@ -168,6 +187,11 @@ instance Arbitrary ArbJsonQueryExpr' where
   arbitrary =
     genericArbitrary uniform
       `withBaseCase` (pure NullExpr)
+      -- TODO: without aggressively moderating query size,
+      -- ts_query_new will hang on the generated queries.
+      -- Not sure if there's an exponential cost to query compilation
+      -- in degenerate cases, or if there's an infinite bug that this
+      -- turns up.
       & scale (`div` 2)
 
 sexp :: (Pretty a) => Text -> [a] -> Doc ann
