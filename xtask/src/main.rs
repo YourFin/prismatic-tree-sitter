@@ -4,13 +4,14 @@
 //!
 //! Commands:
 //! - `lint` - Validate all grammars
-//! - `gen \[name\]` - Regenerate crate files from arborium.kdl and build the static demo
+//! - `gen \[name\]` - Regenerate crate files from arborium.yaml and build the static demo
 //! - `serve` - Build and serve the WASM demo locally
 
 mod cache;
 mod ci;
 mod deploy_website;
 mod generate;
+mod highlight_gen;
 mod lint_new;
 mod theme_gen;
 
@@ -57,7 +58,7 @@ enum Command {
         strict: bool,
     },
 
-    /// Regenerate crate files (Cargo.toml, build.rs, lib.rs, grammar/src/) from arborium.kdl
+    /// Regenerate crate files (Cargo.toml, build.rs, lib.rs, grammar/src/) from arborium.yaml
     Gen {
         /// Optional grammar name to regenerate (regenerates all if omitted)
         #[facet(args::positional, default)]
@@ -240,17 +241,15 @@ enum PublishAction {
 }
 
 fn main() {
-    // Install Miette's graphical error handler for nice CLI diagnostics
-    miette::set_hook(Box::new(|_| {
-        Box::new(miette::MietteHandlerOpts::new().build())
-    }))
-    .ok();
-
     // Initialize tracing subscriber for structured logging
     tracing_subscriber::fmt::init();
 
     let args: Args = facet_args::from_std_args().unwrap_or_else(|e| {
-        eprintln!("{:?}", miette::Report::new(e));
+        if let Some(text) = e.help_text() {
+            eprintln!("{text}");
+        } else {
+            eprintln!("{e}");
+        }
         std::process::exit(1);
     });
 
@@ -266,15 +265,13 @@ fn main() {
 
     match args.command {
         Command::Version => unreachable!(),
-        Command::CacheKey => {
-            match cache::compute_global_cache_key(&repo_root) {
-                Ok(key) => println!("{}", key),
-                Err(e) => {
-                    eprintln!("Error computing cache key: {}", e);
-                    std::process::exit(1);
-                }
+        Command::CacheKey => match cache::compute_global_cache_key(&repo_root) {
+            Ok(key) => println!("{}", key),
+            Err(e) => {
+                eprintln!("Error computing cache key: {}", e);
+                std::process::exit(1);
             }
-        }
+        },
         Command::GenManifest => {
             let repo_root = util::find_repo_root().expect("Could not find repo root");
             let repo_root = camino::Utf8PathBuf::from_path_buf(repo_root).expect("non-UTF8 path");

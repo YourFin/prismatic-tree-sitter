@@ -1,9 +1,10 @@
 //! Serve command - builds and serves the WASM demo.
 //!
-//! This module generates registry.json from arborium.kdl files and serves
+//! This module generates registry.json from arborium.yaml files and serves
 //! the demo with all grammar metadata and inlined sample content.
 
-use crate::theme_gen::{self, HIGHLIGHTS, Theme};
+use crate::highlight_gen;
+use crate::theme_gen::{self, Theme};
 use crate::types::{CrateConfig, CrateRegistry, GrammarConfig, SampleConfig};
 use crate::util;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -55,7 +56,6 @@ struct CodeBlocks {
     docsrs_script: CodeBlock,
     docsrs_cargo: CodeBlock,
     rustdoc_postprocess: CodeBlock,
-    miette_example: CodeBlock,
     html_example_traditional: CodeBlock,
     html_example_arborium: CodeBlock,
 }
@@ -181,7 +181,7 @@ impl Registry {
 
     /// Serialize to pretty JSON using facet-json.
     pub fn to_json_pretty(&self) -> String {
-        facet_json::to_string_pretty(self)
+        facet_json::to_string_pretty(self).expect("registry serialization failed")
     }
 }
 
@@ -195,13 +195,16 @@ impl RegistryGrammar {
     ) -> Self {
         let samples: Vec<RegistrySample> = grammar
             .samples
-            .iter()
+            .as_ref()
+            .map(|s| s.iter())
+            .into_iter()
+            .flatten()
             .filter_map(|sample| RegistrySample::from_sample_config(sample, def_path))
             .collect();
 
         // Extract repo URL (skip "local" which means maintained in this repo)
         let grammar_repo = {
-            let repo = config.repo.value.as_str();
+            let repo = config.repo.as_str();
             if repo == "local" {
                 None
             } else {
@@ -210,24 +213,20 @@ impl RegistryGrammar {
         };
 
         Self {
-            id: grammar.id.value.to_string(),
+            id: grammar.id.to_string(),
             crate_name: crate_name.to_string(),
-            name: grammar.name.value.to_string(),
-            icon: grammar.icon.as_ref().map(|i| i.value.clone()),
-            tier: grammar.tier.as_ref().map(|t| t.value),
-            tag: grammar.tag.value.to_string(),
-            description: grammar.description.as_ref().map(|d| d.value.clone()),
-            inventor: grammar.inventor.as_ref().map(|i| i.value.clone()),
-            year: grammar.year.as_ref().map(|y| y.value),
-            link: grammar.link.as_ref().map(|l| l.value.clone()),
-            trivia: grammar.trivia.as_ref().map(|t| t.value.clone()),
-            aliases: grammar
-                .aliases
-                .as_ref()
-                .map(|a| a.values.clone())
-                .unwrap_or_default(),
+            name: grammar.name.to_string(),
+            icon: grammar.icon.clone(),
+            tier: grammar.tier,
+            tag: grammar.tag.to_string(),
+            description: grammar.description.clone(),
+            inventor: grammar.inventor.clone(),
+            year: grammar.year,
+            link: grammar.link.clone(),
+            trivia: grammar.trivia.clone(),
+            aliases: grammar.aliases.clone().unwrap_or_default(),
             grammar_repo,
-            grammar_license: Some(config.license.value.to_string()),
+            grammar_license: Some(config.license.to_string()),
             samples,
             def_path: def_path.to_string(),
         }
@@ -238,14 +237,14 @@ impl RegistrySample {
     /// Build from a SampleConfig (content is served separately).
     fn from_sample_config(sample: &SampleConfig, crate_path: &Utf8Path) -> Option<Self> {
         // Check the file exists
-        let sample_path = crate_path.join(&*sample.path);
+        let sample_path = crate_path.join(&sample.path);
         if !sample_path.exists() {
             return None;
         }
 
         Some(Self {
-            path: sample.path.value.to_string(),
-            description: sample.description.as_ref().map(|d| d.value.clone()),
+            path: sample.path.to_string(),
+            description: sample.description.clone(),
         })
     }
 }
@@ -562,7 +561,6 @@ fn generate_shared_crate_manifests(repo_root: &Path) -> Result<(), String> {
         "arborium-plugin-runtime",
         "arborium-wire",
         "arborium-query",
-        "miette-arborium",
         "arborium-rustdoc",
         "arborium-mdbook",
     ];
@@ -613,6 +611,7 @@ fn generate_sample_files(
 fn generate_theme_css(crates_dir: &Utf8Path, demo_dir: &Path) -> Result<(), String> {
     use std::fmt::Write;
 
+    let highlights = highlight_gen::parse_highlights(crates_dir)?;
     let themes = theme_gen::parse_all_themes(crates_dir)?;
 
     let pkg_dir = demo_dir.join("pkg");
@@ -636,7 +635,7 @@ fn generate_theme_css(crates_dir: &Utf8Path, demo_dir: &Path) -> Result<(), Stri
         }
 
         // Generate CSS with [data-theme="id"] selector
-        let theme_css = theme.to_css(&format!("[data-theme=\"{id}\"]"));
+        let theme_css = theme.to_css(&format!("[data-theme=\"{id}\"]"), &highlights);
         css.push_str(&theme_css);
         css.push('\n');
     }
@@ -666,7 +665,7 @@ fn copy_plugins_json(crates_dir: &Utf8Path, demo_dir: &Path, dev: bool) -> Resul
         }
 
         // Write to demo directory
-        let output = facet_json::to_string_pretty(&json);
+        let output = facet_json::to_string_pretty(&json).map_err(|e| e.to_string())?;
         fs::write(&output_path, output).map_err(|e| e.to_string())?;
     } else {
         // Generate a minimal plugins.json from registry if build hasn't been run
@@ -819,7 +818,7 @@ fn parse_icon_cache(content: &str) -> BTreeMap<String, String> {
 }
 
 fn serialize_icon_cache(icons: &BTreeMap<String, String>) -> String {
-    facet_json::to_string_pretty(icons)
+    facet_json::to_string_pretty(icons).expect("icon cache serialization failed")
 }
 
 /// Convert a theme name to a CSS-friendly ID (kebab-case, lowercase)
@@ -913,14 +912,6 @@ rustdoc-args = ["--html-in-header", "arborium-header.html"]"#,
             lang: "bash",
             source: r#"# Process rustdoc output in-place
 arborium-rustdoc ./target/doc ./target/doc-highlighted"#,
-        },
-        miette_example: CodeBlock {
-            lang: "rust",
-            source: r#"use miette::GraphicalReportHandler;
-use miette_arborium::ArboriumHighlighter;
-
-let handler = GraphicalReportHandler::new()
-    .with_syntax_highlighting(ArboriumHighlighter::new());"#,
         },
         html_example_traditional: CodeBlock {
             lang: "html",
@@ -1163,7 +1154,7 @@ fn build_language_info_js(registry: &Registry) -> String {
             js.push_str(&format!("        \"tier\": {},\n", tier));
         }
         if let Some(ref desc) = grammar.description {
-            // description is already HTML in arborium.kdl
+            // description is already HTML in arborium.yaml
             js.push_str(&format!(
                 "        \"description\": \"{}\",\n",
                 escape_for_js(desc)
@@ -1182,7 +1173,7 @@ fn build_language_info_js(registry: &Registry) -> String {
             js.push_str(&format!("        \"url\": \"{}\",\n", escape_for_js(link)));
         }
         if let Some(ref trivia) = grammar.trivia {
-            // trivia is already HTML in arborium.kdl
+            // trivia is already HTML in arborium.yaml
             js.push_str(&format!(
                 "        \"trivia\": \"{}\",\n",
                 escape_for_js(trivia)
@@ -1361,6 +1352,9 @@ fn serve_files(server: tiny_http::Server, demo_dir: &Path) {
         } else if url_path.starts_with("langs/") {
             // Serve from repo root for langs/ paths
             (repo_root.join(url_path), repo_root.join("langs"))
+        } else if url_path.starts_with("dist/") {
+            // Serve from repo root for dist/ paths (WASM plugins)
+            (repo_root.join(url_path), repo_root.join("dist"))
         } else {
             (demo_dir.join(url_path), demo_dir.to_path_buf())
         };
@@ -1457,6 +1451,7 @@ fn guess_content_type(path: &Path) -> &'static str {
 pub fn generate_npm_theme_css(crates_dir: &Utf8Path) -> Result<(), String> {
     use std::fmt::Write;
 
+    let highlights = highlight_gen::parse_highlights(crates_dir)?;
     let themes = theme_gen::parse_all_themes(crates_dir)?;
 
     let repo_root = crates_dir.parent().ok_or("crates_dir has no parent")?;
@@ -1471,11 +1466,11 @@ pub fn generate_npm_theme_css(crates_dir: &Utf8Path) -> Result<(), String> {
         themes_dir.cyan()
     );
 
-    // Collect all tags that have styles across any theme
+    // Collect all unique tags
     let mut all_tags: Vec<&str> = Vec::new();
-    for def in HIGHLIGHTS.iter() {
-        if !def.tag.is_empty() && !all_tags.contains(&def.tag) {
-            all_tags.push(def.tag);
+    for def in &highlights.defs {
+        if !def.def.tag.is_empty() && !all_tags.contains(&def.def.tag.as_str()) {
+            all_tags.push(&def.def.tag);
         }
     }
 
@@ -1502,50 +1497,35 @@ pub fn generate_npm_theme_css(crates_dir: &Utf8Path) -> Result<(), String> {
 
         writeln!(css, ":root {{").unwrap();
 
-        // Build a map from tag -> style for parent lookups
-        let mut tag_to_style: std::collections::HashMap<&str, &theme_gen::Style> =
-            std::collections::HashMap::new();
-        for (i, def) in HIGHLIGHTS.iter().enumerate() {
-            if let Some(style) = theme.style(i)
-                && !def.tag.is_empty()
-                && !style.is_empty()
-            {
-                tag_to_style.insert(def.tag, style);
-            }
+        // Include background and foreground base colors if present
+        if let Some(bg) = &theme.background {
+            writeln!(css, "  --arb-bg-{}: {};", variant, bg.to_hex()).unwrap();
+        }
+        if let Some(fg) = &theme.foreground {
+            writeln!(css, "  --arb-fg-{}: {};", variant, fg.to_hex()).unwrap();
         }
 
-        // Generate CSS variables for each highlight category
-        for (i, def) in HIGHLIGHTS.iter().enumerate() {
-            if def.tag.is_empty() {
-                continue;
-            }
-
-            let style = if let Some(s) = theme.style(i) {
-                if !s.is_empty() {
-                    s
-                } else if !def.parent_tag.is_empty() {
-                    if let Some(parent_style) = tag_to_style.get(def.parent_tag) {
-                        *parent_style
-                    } else {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
-            } else {
+        // Generate CSS variables for each unique tag with fallback resolution
+        for def in highlights.unique_tags() {
+            // Resolve style with fallback
+            let Some(style) = theme.resolve_style(def, &highlights) else {
                 continue;
             };
 
+            if style.is_empty() {
+                continue;
+            }
+
             if let Some(fg) = &style.fg {
-                writeln!(css, "  --arb-{}-{}: {};", def.tag, variant, fg.to_hex()).unwrap();
+                writeln!(css, "  --arb-{}-{}: {};", def.def.tag, variant, fg.to_hex()).unwrap();
             }
 
             // Handle modifiers as separate variables
             if style.bold {
-                writeln!(css, "  --arb-{}-{}-weight: bold;", def.tag, variant).unwrap();
+                writeln!(css, "  --arb-{}-{}-weight: bold;", def.def.tag, variant).unwrap();
             }
             if style.italic {
-                writeln!(css, "  --arb-{}-{}-style: italic;", def.tag, variant).unwrap();
+                writeln!(css, "  --arb-{}-{}-style: italic;", def.def.tag, variant).unwrap();
             }
             if style.underline || style.strikethrough {
                 let mut decorations = Vec::new();
@@ -1558,7 +1538,7 @@ pub fn generate_npm_theme_css(crates_dir: &Utf8Path) -> Result<(), String> {
                 writeln!(
                     css,
                     "  --arb-{}-{}-decoration: {};",
-                    def.tag,
+                    def.def.tag,
                     variant,
                     decorations.join(" ")
                 )
@@ -1571,6 +1551,22 @@ pub fn generate_npm_theme_css(crates_dir: &Utf8Path) -> Result<(), String> {
         fs::write(&output_path, &css).map_err(|e| e.to_string())?;
         generated += 1;
     }
+
+    // Helper to emit tag rules
+    let emit_tag_rules = |css: &mut String, variant: &str, indent: &str| {
+        let mut emitted: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for def in &highlights.defs {
+            if def.def.tag.is_empty() || emitted.contains(def.def.tag.as_str()) {
+                continue;
+            }
+            emitted.insert(&def.def.tag);
+            writeln!(
+                css,
+                "{}a-{} {{ color: var(--arb-{}-{}); font-weight: var(--arb-{}-{}-weight, normal); font-style: var(--arb-{}-{}-style, normal); text-decoration: var(--arb-{}-{}-decoration, none); }}",
+                indent, def.def.tag, def.def.tag, variant, def.def.tag, variant, def.def.tag, variant, def.def.tag, variant
+            ).unwrap();
+        }
+    };
 
     // Generate base.css - standard switching with media queries and [data-theme]
     let base_path = themes_dir.join("base.css");
@@ -1589,75 +1585,23 @@ pub fn generate_npm_theme_css(crates_dir: &Utf8Path) -> Result<(), String> {
 
     // Default: use light variables
     writeln!(base_css, "/* Default: light mode */").unwrap();
-    {
-        let mut emitted_tags: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        for def in HIGHLIGHTS.iter() {
-            if def.tag.is_empty() || emitted_tags.contains(def.tag) {
-                continue;
-            }
-            emitted_tags.insert(def.tag);
-            writeln!(
-                base_css,
-                "a-{} {{ color: var(--arb-{}-light); font-weight: var(--arb-{}-light-weight, normal); font-style: var(--arb-{}-light-style, normal); text-decoration: var(--arb-{}-light-decoration, none); }}",
-                def.tag, def.tag, def.tag, def.tag, def.tag
-            ).unwrap();
-        }
-    }
+    emit_tag_rules(&mut base_css, "light", "");
 
     // Media query for dark preference
     writeln!(base_css, "\n/* System preference: dark */").unwrap();
     writeln!(base_css, "@media (prefers-color-scheme: dark) {{").unwrap();
-    {
-        let mut emitted_tags: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        for def in HIGHLIGHTS.iter() {
-            if def.tag.is_empty() || emitted_tags.contains(def.tag) {
-                continue;
-            }
-            emitted_tags.insert(def.tag);
-            writeln!(
-                base_css,
-                "  a-{} {{ color: var(--arb-{}-dark); font-weight: var(--arb-{}-dark-weight, normal); font-style: var(--arb-{}-dark-style, normal); text-decoration: var(--arb-{}-dark-decoration, none); }}",
-                def.tag, def.tag, def.tag, def.tag, def.tag
-            ).unwrap();
-        }
-    }
+    emit_tag_rules(&mut base_css, "dark", "  ");
     writeln!(base_css, "}}").unwrap();
 
     // Explicit data-theme overrides
     writeln!(base_css, "\n/* Explicit light mode */").unwrap();
     writeln!(base_css, ":root[data-theme=\"light\"] {{").unwrap();
-    {
-        let mut emitted_tags: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        for def in HIGHLIGHTS.iter() {
-            if def.tag.is_empty() || emitted_tags.contains(def.tag) {
-                continue;
-            }
-            emitted_tags.insert(def.tag);
-            writeln!(
-                base_css,
-                "  a-{} {{ color: var(--arb-{}-light); font-weight: var(--arb-{}-light-weight, normal); font-style: var(--arb-{}-light-style, normal); text-decoration: var(--arb-{}-light-decoration, none); }}",
-                def.tag, def.tag, def.tag, def.tag, def.tag
-            ).unwrap();
-        }
-    }
+    emit_tag_rules(&mut base_css, "light", "  ");
     writeln!(base_css, "}}").unwrap();
 
     writeln!(base_css, "\n/* Explicit dark mode */").unwrap();
     writeln!(base_css, ":root[data-theme=\"dark\"] {{").unwrap();
-    {
-        let mut emitted_tags: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        for def in HIGHLIGHTS.iter() {
-            if def.tag.is_empty() || emitted_tags.contains(def.tag) {
-                continue;
-            }
-            emitted_tags.insert(def.tag);
-            writeln!(
-                base_css,
-                "  a-{} {{ color: var(--arb-{}-dark); font-weight: var(--arb-{}-dark-weight, normal); font-style: var(--arb-{}-dark-style, normal); text-decoration: var(--arb-{}-dark-decoration, none); }}",
-                def.tag, def.tag, def.tag, def.tag, def.tag
-            ).unwrap();
-        }
-    }
+    emit_tag_rules(&mut base_css, "dark", "  ");
     writeln!(base_css, "}}").unwrap();
 
     fs::write(&base_path, &base_css).map_err(|e| e.to_string())?;
@@ -1677,16 +1621,11 @@ pub fn generate_npm_theme_css(crates_dir: &Utf8Path) -> Result<(), String> {
     )
     .unwrap();
 
-    let mut emitted_tags: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    for def in HIGHLIGHTS.iter() {
-        if def.tag.is_empty() || emitted_tags.contains(def.tag) {
-            continue;
-        }
-        emitted_tags.insert(def.tag);
+    for def in highlights.unique_tags() {
         writeln!(
             rustdoc_css,
             "a-{} {{ color: var(--arb-{}-dark, var(--arb-{}-light)); font-weight: var(--arb-{}-dark-weight, var(--arb-{}-light-weight, normal)); font-style: var(--arb-{}-dark-style, var(--arb-{}-light-style, normal)); text-decoration: var(--arb-{}-dark-decoration, var(--arb-{}-light-decoration, none)); }}",
-            def.tag, def.tag, def.tag, def.tag, def.tag, def.tag, def.tag, def.tag, def.tag
+            def.def.tag, def.def.tag, def.def.tag, def.def.tag, def.def.tag, def.def.tag, def.def.tag, def.def.tag, def.def.tag
         ).unwrap();
     }
 

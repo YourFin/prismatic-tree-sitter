@@ -11,11 +11,18 @@ use rand::seq::SliceRandom;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use chrono::Utc;
-use miette::{Context, IntoDiagnostic, Result, miette};
+use rootcause::Report;
+
+type Result<T> = std::result::Result<T, Report>;
+
+fn report(msg: impl Into<String>) -> Report {
+    std::io::Error::other(msg.into()).into()
+}
 use rayon::prelude::*;
 use sailfish::TemplateSimple;
 use walrus::Module;
 
+use crate::highlight_gen::{self, NamedHighlight};
 use crate::tool::Tool;
 use crate::types::CrateRegistry;
 use crate::version_store;
@@ -45,24 +52,21 @@ fn ensure_rust_nightly_with_wasm_target() -> Result<()> {
     let mut cmd = Command::new("rustup");
     cmd.args(["toolchain", "list"]);
     let output = run_cmd_output(cmd)
-        .into_diagnostic()
-        .context("failed to run rustup toolchain list")?;
+        ?;
 
     let toolchains = String::from_utf8_lossy(&output.stdout);
     let has_nightly = toolchains.lines().any(|line| line.contains("nightly"));
 
     if !has_nightly {
-        miette::bail!(
+        return Err(report(
             "nightly toolchain not found. Install with: rustup toolchain install nightly"
-        );
+        ));
     }
 
     // Check if wasm32-unknown-unknown target is installed for nightly
     let mut cmd = Command::new("rustup");
     cmd.args(["+nightly", "target", "list", "--installed"]);
-    let output = run_cmd_output(cmd)
-        .into_diagnostic()
-        .context("failed to check installed targets")?;
+    let output = run_cmd_output(cmd)?;
 
     let targets = String::from_utf8_lossy(&output.stdout);
     let has_wasm_target = targets
@@ -70,25 +74,24 @@ fn ensure_rust_nightly_with_wasm_target() -> Result<()> {
         .any(|line| line.trim() == "wasm32-unknown-unknown");
 
     if !has_wasm_target {
-        miette::bail!(
+        return Err(report(
             "wasm32-unknown-unknown target not found for nightly. Install with: rustup target add wasm32-unknown-unknown --toolchain nightly"
-        );
+        ));
     }
 
     // Check if rust-src component is installed for nightly (needed for -Zbuild-std)
     let mut cmd = Command::new("rustup");
     cmd.args(["+nightly", "component", "list", "--installed"]);
     let output = run_cmd_output(cmd)
-        .into_diagnostic()
-        .context("failed to check installed components")?;
+        ?;
 
     let components = String::from_utf8_lossy(&output.stdout);
     let has_rust_src = components.lines().any(|line| line.starts_with("rust-src"));
 
     if !has_rust_src {
-        miette::bail!(
+        return Err(report(
             "rust-src component not found for nightly. Install with: rustup component add rust-src --toolchain nightly"
-        );
+        ));
     }
 
     Ok(())
@@ -428,12 +431,12 @@ pub struct PluginGroups {
 
 impl PluginGroups {
     /// Discover plugin groups from langs/group-* directories.
-    pub fn discover(langs_dir: &Utf8Path) -> miette::Result<Self> {
+    pub fn discover(langs_dir: &Utf8Path) -> Result<Self> {
         let mut groups = Vec::new();
 
         // Read all group-* directories
         let mut group_dirs: Vec<_> = std::fs::read_dir(langs_dir)
-            .map_err(|e| miette::miette!("failed to read {}: {}", langs_dir, e))?
+            .map_err(|e| report(format!("failed to read {}: {}", langs_dir, e)))?
             .filter_map(|entry| entry.ok())
             .filter(|entry| {
                 let name = entry.file_name();
@@ -458,10 +461,10 @@ impl PluginGroups {
 
             // Read all grammar directories within this group
             for lang_entry in std::fs::read_dir(&group_path)
-                .map_err(|e| miette::miette!("failed to read {:?}: {}", group_path, e))?
+                .map_err(|e| report(format!("failed to read {:?}: {}", group_path, e)))?
             {
                 let lang_entry =
-                    lang_entry.map_err(|e| miette::miette!("failed to read entry: {}", e))?;
+                    lang_entry.map_err(|e| report(format!("failed to read entry: {}", e)))?;
                 if lang_entry.path().is_dir() {
                     grammars.push(lang_entry.file_name().to_string_lossy().to_string());
                 }
@@ -510,7 +513,7 @@ pub fn build_plugins(repo_root: &Utf8Path, options: &BuildOptions) -> Result<()>
     let version = version_store::read_version(repo_root)?;
 
     let registry = CrateRegistry::load(&crates_dir)
-        .map_err(|e| miette::miette!("failed to load crate registry: {}", e))?;
+        .map_err(|e| report(format!("failed to load crate registry: {}", e)))?;
 
     let mut grammars: Vec<String> = if !options.grammars.is_empty() {
         options.grammars.clone()
@@ -553,15 +556,9 @@ pub fn build_plugins(repo_root: &Utf8Path, options: &BuildOptions) -> Result<()>
     // Verify nightly toolchain and wasm32-unknown-unknown target are available
     ensure_rust_nightly_with_wasm_target()?;
 
-    let wasm_bindgen = Tool::WasmBindgen
-        .find()
-        .into_diagnostic()
-        .context("wasm-bindgen not found")?;
+    let wasm_bindgen = Tool::WasmBindgen.find()?;
 
-    let wasm_opt = Tool::WasmOpt
-        .find()
-        .into_diagnostic()
-        .context("wasm-opt not found")?;
+    let wasm_opt = Tool::WasmOpt.find()?;
 
     let printer = OutputPrinter::new(grammars.len());
     let errors: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
@@ -621,11 +618,11 @@ pub fn build_plugins(repo_root: &Utf8Path, options: &BuildOptions) -> Result<()>
                 .collect::<Vec<_>>()
                 .join("\n");
 
-            miette::bail!(
+            return Err(report(format!(
                 "Build completed with {} failure(s):\n{}",
                 errors.len(),
                 summary
-            );
+            )));
         }
     }
 
@@ -639,12 +636,8 @@ pub fn build_plugins(repo_root: &Utf8Path, options: &BuildOptions) -> Result<()>
 
     // Write JSON manifest to langs/plugins.json (for dev server)
     let manifest_path = repo_root.join("langs").join("plugins.json");
-    fs_err::create_dir_all(manifest_path.parent().unwrap())
-        .into_diagnostic()
-        .context("failed to create manifest dir")?;
-    fs_err::write(&manifest_path, facet_json::to_string_pretty(&manifest))
-        .into_diagnostic()
-        .context("failed to write manifest")?;
+    fs_err::create_dir_all(manifest_path.parent().unwrap())?;
+    fs_err::write(&manifest_path, facet_json::to_string_pretty(&manifest).expect("manifest serialization failed"))?;
     println!(
         "{} Wrote plugin manifest {}",
         "✓".green(),
@@ -658,16 +651,17 @@ pub fn build_plugins(repo_root: &Utf8Path, options: &BuildOptions) -> Result<()>
     let ts_manifest_path = repo_root
         .join("packages/arborium/src")
         .join("plugins-manifest.ts");
+    let highlights = highlight_gen::parse_highlights(&crates_dir)
+        .map_err(|e| report(format!("failed to parse highlights: {}", e)))?;
     let ts_template = PluginsManifestTsTemplate {
         version: &version,
         languages: &sorted_grammars,
+        highlights: &highlights.defs,
     };
     let ts_content = ts_template
         .render_once()
         .expect("PluginsManifestTsTemplate render failed");
-    fs_err::write(&ts_manifest_path, ts_content)
-        .into_diagnostic()
-        .context("failed to write TypeScript manifest")?;
+    fs_err::write(&ts_manifest_path, ts_content)?;
     println!(
         "{} Wrote TypeScript manifest {} (version {})",
         "✓".green(),
@@ -702,10 +696,7 @@ pub fn build_host(repo_root: &Utf8Path) -> Result<()> {
         "Building arborium-host (wasm-bindgen)".bold()
     );
 
-    let wasm_pack = Tool::WasmPack
-        .find()
-        .into_diagnostic()
-        .context("wasm-pack not found")?;
+    let wasm_pack = Tool::WasmPack.find()?;
 
     let host_crate = repo_root.join("crates/arborium-host");
     let demo_pkg = repo_root.join("demo/pkg");
@@ -725,14 +716,12 @@ pub fn build_host(repo_root: &Utf8Path) -> Result<()> {
     ])
     .current_dir(&host_crate);
 
-    let output = run_cmd_output(cmd)
-        .into_diagnostic()
-        .context("failed to run wasm-pack")?;
+    let output = run_cmd_output(cmd)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        miette::bail!("wasm-pack build failed:\n{}\n{}", stdout, stderr);
+        return Err(report(format!("wasm-pack build failed:\n{}\n{}", stdout, stderr)));
     }
 
     // wasm-pack generates files with _bg suffix for the wasm file
@@ -752,11 +741,8 @@ pub fn clean_plugins(repo_root: &Utf8Path, _output_dir: &str) -> Result<()> {
     let mut cleaned_count = 0;
 
     // Find all plugin npm/ directories and clean their target and artifact directories
-    for group_entry in std::fs::read_dir(&langs_dir)
-        .into_diagnostic()
-        .context("failed to read langs dir")?
-    {
-        let group_entry = group_entry.into_diagnostic()?;
+    for group_entry in std::fs::read_dir(&langs_dir)? {
+        let group_entry = group_entry?;
         let group_path = group_entry.path();
 
         if !group_path.is_dir()
@@ -768,26 +754,19 @@ pub fn clean_plugins(repo_root: &Utf8Path, _output_dir: &str) -> Result<()> {
             continue;
         }
 
-        for lang_entry in std::fs::read_dir(&group_path)
-            .into_diagnostic()
-            .context(format!("failed to read {:?}", group_path))?
-        {
-            let lang_entry = lang_entry.into_diagnostic()?;
+        for lang_entry in std::fs::read_dir(&group_path)? {
+            let lang_entry = lang_entry?;
             let npm_dir = lang_entry.path().join("npm");
             let target_dir = npm_dir.join("target");
             let artifact_dir = npm_dir.join("artifact-out");
 
             if target_dir.exists() {
-                std::fs::remove_dir_all(&target_dir)
-                    .into_diagnostic()
-                    .context(format!("failed to remove {:?}", target_dir))?;
+                std::fs::remove_dir_all(&target_dir)?;
                 cleaned_count += 1;
             }
 
             if artifact_dir.exists() {
-                std::fs::remove_dir_all(&artifact_dir)
-                    .into_diagnostic()
-                    .context(format!("failed to remove {:?}", artifact_dir))?;
+                std::fs::remove_dir_all(&artifact_dir)?;
             }
         }
     }
@@ -823,7 +802,7 @@ pub fn build_demo(repo_root: &Utf8Path, crates_dir: &Utf8Path, dev: bool) -> Res
 
     // Generate registry.json and assets
     crate::serve::generate_registry_and_assets(crates_dir, &demo_dir, dev)
-        .map_err(|e| miette::miette!("Failed to generate assets: {}", e))?;
+        .map_err(|e| report(format!("Failed to generate assets: {}", e)))?;
 
     // Print next steps
     println!();
@@ -851,10 +830,10 @@ fn build_single_plugin(
     printer.print_line(grammar, "Building...", false);
 
     let (crate_state, _) = locate_grammar(registry, grammar).ok_or_else(|| {
-        miette::miette!(
+        report(format!(
             "grammar `{}` not found in registry (generate components must be enabled)",
             grammar
-        )
+        ))
     })?;
 
     let grammar_crate_path = &crate_state.crate_path;
@@ -882,10 +861,10 @@ fn build_single_plugin(
     let cargo_toml = plugin_source.join("Cargo.toml");
     let lib_rs = plugin_source.join("src/lib.rs");
     if !cargo_toml.exists() || !lib_rs.exists() {
-        miette::bail!(
+        return Err(report(format!(
             "Plugin crate files not found at {}. Run `cargo xtask gen --version <version>` first.",
             plugin_source
-        );
+        )));
     }
 
     // Step 1: Build with cargo +nightly using unstable features
@@ -893,9 +872,7 @@ fn build_single_plugin(
 
     // Create a unique artifact directory for this plugin to avoid locking
     let artifact_dir = plugin_source.join("artifact-out");
-    std::fs::create_dir_all(&artifact_dir)
-        .into_diagnostic()
-        .context("failed to create artifact directory")?;
+    std::fs::create_dir_all(&artifact_dir)?;
 
     let mut cargo_cmd = Command::new("cargo");
     cargo_cmd
@@ -936,12 +913,10 @@ fn build_single_plugin(
         )
         .current_dir(&plugin_source);
 
-    let result = run_streaming(cargo_cmd, grammar, printer)
-        .into_diagnostic()
-        .context("failed to run cargo build")?;
+    let result = run_streaming(cargo_cmd, grammar, printer)?;
 
     if !result.status.success() {
-        miette::bail!("cargo build failed:\n{}", result.stderr);
+        return Err(report(format!("cargo build failed:\n{}", result.stderr)));
     }
 
     // Step 2: Locate the .wasm file in the artifact directory
@@ -950,18 +925,16 @@ fn build_single_plugin(
     let wasm_file = artifact_dir.join(format!("{}.wasm", wasm_name));
 
     if !wasm_file.exists() {
-        miette::bail!(
+        return Err(report(format!(
             "WASM file not found at {}. Build may have failed.",
             wasm_file
-        );
+        )));
     }
 
     // Step 3: Run wasm-bindgen to generate JS bindings
     // Create a temporary output directory for wasm-bindgen
     let bindgen_out = plugin_source.join("pkg");
-    fs_err::create_dir_all(&bindgen_out)
-        .into_diagnostic()
-        .context("failed to create bindgen output directory")?;
+    fs_err::create_dir_all(&bindgen_out)?;
 
     let mut bindgen_cmd = wasm_bindgen.command();
     bindgen_cmd
@@ -976,12 +949,10 @@ fn build_single_plugin(
         ])
         .current_dir(&plugin_source);
 
-    let result = run_streaming(bindgen_cmd, grammar, printer)
-        .into_diagnostic()
-        .context("failed to run wasm-bindgen")?;
+    let result = run_streaming(bindgen_cmd, grammar, printer)?;
 
     if !result.status.success() {
-        miette::bail!("wasm-bindgen failed:\n{}", result.stderr);
+        return Err(report(format!("wasm-bindgen failed:\n{}", result.stderr)));
     }
 
     // Step 4: Optimize WASM with wasm-opt
@@ -1003,18 +974,14 @@ fn build_single_plugin(
         ])
         .current_dir(&plugin_source);
 
-    let result = run_streaming(opt_cmd, grammar, printer)
-        .into_diagnostic()
-        .context("failed to run wasm-opt")?;
+    let result = run_streaming(opt_cmd, grammar, printer)?;
 
     if !result.status.success() {
-        miette::bail!("wasm-opt failed:\n{}", result.stderr);
+        return Err(report(format!("wasm-opt failed:\n{}", result.stderr)));
     }
 
     // Step 5: Copy and rename output files
-    fs_err::create_dir_all(&plugin_output)
-        .into_diagnostic()
-        .context("failed to create output directory")?;
+    fs_err::create_dir_all(&plugin_output)?;
 
     // Use optimized WASM and generated JS
     let src_js = bindgen_out.join(format!("{}.js", wasm_name));
@@ -1023,18 +990,9 @@ fn build_single_plugin(
     let dest_js = plugin_output.join("grammar.js");
 
     // Copy and rename files (use optimized WASM)
-    std::fs::copy(&optimized_wasm, &dest_wasm)
-        .into_diagnostic()
-        .with_context(|| {
-            format!(
-                "failed to copy optimized wasm file from {} to {}",
-                optimized_wasm, dest_wasm
-            )
-        })?;
+    std::fs::copy(&optimized_wasm, &dest_wasm)?;
 
-    std::fs::copy(&src_js, &dest_js)
-        .into_diagnostic()
-        .with_context(|| format!("failed to copy js file from {} to {}", src_js, dest_js))?;
+    std::fs::copy(&src_js, &dest_js)?;
 
     // Check WASM browser compatibility on final WASM file
     println!("  {} Checking WASM browser compatibility...", "●".yellow());
@@ -1044,12 +1002,8 @@ fn build_single_plugin(
     // Copy and update package.json (preserve generated metadata like repository/homepage)
     let source_package_json = plugin_source.join("package.json");
     let dest_package_json = plugin_output.join("package.json");
-    let package_json_str = fs_err::read_to_string(&source_package_json)
-        .into_diagnostic()
-        .context("failed to read source package.json")?;
-    let mut package_json_value: serde_json::Value = serde_json::from_str(&package_json_str)
-        .into_diagnostic()
-        .context("failed to parse source package.json")?;
+    let package_json_str = fs_err::read_to_string(&source_package_json)?;
+    let mut package_json_value: serde_json::Value = serde_json::from_str(&package_json_str)?;
     if let Some(obj) = package_json_value.as_object_mut() {
         obj.insert(
             "version".to_string(),
@@ -1059,9 +1013,7 @@ fn build_single_plugin(
     std::fs::write(
         &dest_package_json,
         serde_json::to_string_pretty(&package_json_value).unwrap(),
-    )
-    .into_diagnostic()
-    .context("failed to write package.json")?;
+    )?;
 
     // Calculate WASM sizes for the final optimized file
     let (size_bytes, size_gzip, size_brotli) = calculate_wasm_sizes(&dest_wasm)?;
@@ -1098,27 +1050,16 @@ pub fn calculate_wasm_sizes(wasm_path: &Utf8Path) -> Result<(u64, u64, u64)> {
     use std::io::Write;
 
     // Uncompressed size
-    let metadata = fs_err::metadata(wasm_path)
-        .into_diagnostic()
-        .context("failed to read WASM file metadata")?;
+    let metadata = fs_err::metadata(wasm_path)?;
     let size_bytes = metadata.len();
 
     // Read file into memory
-    let wasm_data = fs_err::read(wasm_path)
-        .into_diagnostic()
-        .context("failed to read WASM file")?;
+    let wasm_data = fs_err::read(wasm_path)?;
 
     // Gzip compression
     let mut gz_encoder = GzEncoder::new(Vec::new(), Compression::best());
-    gz_encoder
-        .write_all(&wasm_data)
-        .into_diagnostic()
-        .context("failed to write to gzip encoder")?;
-    let size_gzip = gz_encoder
-        .finish()
-        .into_diagnostic()
-        .context("failed to finish gzip compression")?
-        .len() as u64;
+    gz_encoder.write_all(&wasm_data)?;
+    let size_gzip = gz_encoder.finish()?.len() as u64;
 
     // Brotli compression (quality 11 = max)
     let mut brotli_output = Vec::new();
@@ -1128,10 +1069,7 @@ pub fn calculate_wasm_sizes(wasm_path: &Utf8Path) -> Result<(u64, u64, u64)> {
         11,   // quality (max)
         22,   // lg_window_size
     );
-    brotli_encoder
-        .write_all(&wasm_data)
-        .into_diagnostic()
-        .context("failed to write to brotli encoder")?;
+    brotli_encoder.write_all(&wasm_data)?;
     drop(brotli_encoder);
     let size_brotli = brotli_output.len() as u64;
 
@@ -1148,17 +1086,18 @@ pub fn locate_grammar<'a>(
     registry.configured_crates().find_map(|(_, state, cfg)| {
         cfg.grammars
             .iter()
-            .find(|g| <String as AsRef<str>>::as_ref(&g.id.value) == grammar)
+            .find(|g| g.id.as_str() == grammar)
             .map(|g| (state, g))
     })
 }
 
-/// Sailfish template for TypeScript manifest (simplified - just language names).
+/// Sailfish template for TypeScript manifest (simplified - just language names and highlight defs).
 #[derive(sailfish::TemplateSimple)]
 #[template(path = "plugins_manifest.stpl.ts")]
 struct PluginsManifestTsTemplate<'a> {
     version: &'a str,
     languages: &'a [String],
+    highlights: &'a [NamedHighlight],
 }
 
 /// Generate the plugins-manifest.ts file for the npm package.
@@ -1170,7 +1109,7 @@ pub fn generate_plugins_manifest(repo_root: &Utf8Path, crates_dir: &Utf8Path) ->
     let version = version_store::read_version(repo_root)?;
 
     let registry = CrateRegistry::load(crates_dir)
-        .map_err(|e| miette::miette!("failed to load crate registry: {}", e))?;
+        .map_err(|e| report(format!("failed to load crate registry: {}", e)))?;
 
     // Get ALL grammars that have generate_component enabled
     let mut languages: Vec<String> = registry
@@ -1183,7 +1122,7 @@ pub fn generate_plugins_manifest(repo_root: &Utf8Path, crates_dir: &Utf8Path) ->
     languages.sort();
 
     if languages.is_empty() {
-        miette::bail!("No grammars have generate-component enabled");
+        return Err(report("No grammars have generate-component enabled"));
     }
 
     println!(
@@ -1197,16 +1136,17 @@ pub fn generate_plugins_manifest(repo_root: &Utf8Path, crates_dir: &Utf8Path) ->
     let ts_manifest_path = repo_root
         .join("packages/arborium/src")
         .join("plugins-manifest.ts");
+    let highlights = highlight_gen::parse_highlights(crates_dir)
+        .map_err(|e| report(format!("failed to parse highlights: {}", e)))?;
     let ts_template = PluginsManifestTsTemplate {
         version: &version,
         languages: &languages,
+        highlights: &highlights.defs,
     };
     let ts_content = ts_template
         .render_once()
         .expect("PluginsManifestTsTemplate render failed");
-    fs_err::write(&ts_manifest_path, ts_content)
-        .into_diagnostic()
-        .context("failed to write TypeScript manifest")?;
+    fs_err::write(&ts_manifest_path, ts_content)?;
 
     println!(
         "{} Wrote {} with {} languages at version {}",
@@ -1230,7 +1170,7 @@ fn build_manifest(
 
     for grammar in grammars {
         let (state, _) = locate_grammar(registry, grammar)
-            .ok_or_else(|| miette::miette!("grammar `{}` not found for manifest", grammar))?;
+            .ok_or_else(|| report(format!("grammar `{}` not found for manifest", grammar)))?;
 
         let local_root = if let Some(base) = output_override {
             let base = if base.is_absolute() {
@@ -1290,10 +1230,10 @@ fn build_manifest(
 /// Returns an error if any "env" imports are found (which won't work in browsers)
 fn check_wasm_browser_compatibility(wasm_file: &camino::Utf8Path) -> Result<()> {
     let wasm_bytes = std::fs::read(wasm_file)
-        .map_err(|e| miette!("Failed to read WASM file {}: {}", wasm_file, e))?;
+        .map_err(|e| report(format!("Failed to read WASM file {}: {}", wasm_file, e)))?;
 
     let module = Module::from_buffer(&wasm_bytes)
-        .map_err(|e| miette!("Failed to parse WASM file {}: {}", wasm_file, e))?;
+        .map_err(|e| report(format!("Failed to parse WASM file {}: {}", wasm_file, e)))?;
 
     let mut env_imports = Vec::new();
 
@@ -1304,7 +1244,7 @@ fn check_wasm_browser_compatibility(wasm_file: &camino::Utf8Path) -> Result<()> 
     }
 
     if !env_imports.is_empty() {
-        return Err(miette!(
+        return Err(report(format!(
             "WASM module {} has {} browser-incompatible imports from 'env':\n{}\n\n\
              These imports won't work in web browsers. Provide these symbols in the WASM sysroot or \
              remove the dependencies that require them.",
@@ -1315,7 +1255,7 @@ fn check_wasm_browser_compatibility(wasm_file: &camino::Utf8Path) -> Result<()> 
                 .map(|name| format!("  - env.{}", name))
                 .collect::<Vec<_>>()
                 .join("\n")
-        ));
+        )));
     }
 
     Ok(())
