@@ -68,6 +68,7 @@ subtree-add path repo:
 [group('subtree')]
 subtree-update path="optional":
     #!/usr/bin/env -S nu -n
+    use {{justfile_directory()}}/.just *
     let mPath = '{{path}}'
     let path = if ($mPath == "optional") {
       open .subtree.toml | columns | str join "\n" | fzf
@@ -75,7 +76,7 @@ subtree-update path="optional":
       $mPath
     }
     let subtree = open .subtree.toml | get $path
-    let latestTag = latest-tag $repo
+    let latestTag = latest-tag $subtree.src
     if $latestTag == $subtree.tag {
       print $"Already up to date; release is ($latestTag)"
     } else {
